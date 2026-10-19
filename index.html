@@ -148,15 +148,15 @@
                             <span class="w-3 h-3 bg-blue-600 rounded-full"></span>
                             <h2 class="font-bold text-slate-800 text-base">Primary Reference Dataset</h2>
                         </div>
-                        <span class="text-xs bg-blue-100 text-blue-800 font-semibold px-2.5 py-1 rounded">Primary</span>
+                        <span class="text-xs bg-blue-100 text-blue-800 font-semibold px-2.5 py-1 rounded">Pure / Scopus</span>
                     </div>
-                    <p class="text-xs text-slate-500">Upload existing validated records</p>
+                    <p class="text-xs text-slate-500">Upload existing validated records (.xlsx, .xls, .docx, .pdf, .csv, .bib, .bibtex, .txt).</p>
                     <div id="scopus-dropzone" onclick="document.getElementById('scopus-input').click()" class="border-2 border-dashed border-slate-300 hover:border-hkust-blue rounded-lg p-5 text-center cursor-pointer transition bg-slate-50 hover:bg-slate-100">
                         <i data-lucide="file-spreadsheet" class="w-9 h-9 mx-auto text-slate-400 mb-1.5"></i>
                         <p class="text-xs font-semibold text-slate-700">Click to browse or drop Reference file(s) here</p>
-                        <p class="text-[11px] text-slate-400 mt-1">Supports XLSX, XLS, CSV, BibTeX, DOCX, TXT and PDF</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Supports XLSX, XLS, CSV, BibTeX (.bib / .bibtex), DOCX, PDF, and TXT</p>
                     </div>
-                    <input type="file" id="scopus-input" accept=".csv,.xlsx,.xls,.bib,.bibtex,.docx,.pdf,.txt" multiple class="hidden" onclick="event.stopPropagation()" onchange="handleFileUpload(event, 'scopus')">
+                    <input type="file" id="scopus-input" accept=".csv,.xlsx,.xls,.bib,.bibtex,.docx,.pdf,.txt,text/plain,application/x-bibtex,text/x-bibtex" multiple class="hidden" onclick="event.stopPropagation()" onchange="handleFileUpload(event, 'scopus')">
                     <div id="scopus-file-info" class="hidden space-y-2">
                         <div class="flex justify-between items-center text-xs font-semibold text-slate-700">
                             <span>Uploaded Reference Files (<span id="scopus-file-count">0</span>):</span>
@@ -173,15 +173,15 @@
                             <span class="w-3 h-3 bg-amber-500 rounded-full"></span>
                             <h2 class="font-bold text-slate-800 text-base">Comparison Target Dataset</h2>
                         </div>
-                        <span class="text-xs bg-amber-100 text-amber-800 font-semibold px-2.5 py-1 rounded">Candidate</span>
+                        <span class="text-xs bg-amber-100 text-amber-800 font-semibold px-2.5 py-1 rounded">Faculty CV / Candidate</span>
                     </div>
-                    <p class="text-xs text-slate-500">Upload candidate file(s)</p>
+                    <p class="text-xs text-slate-500">Upload faculty CV or candidate list (.xlsx, .xls, .docx, .pdf, .csv, .bib, .bibtex, .txt).</p>
                     <div id="target-dropzone" onclick="document.getElementById('target-input').click()" class="border-2 border-dashed border-slate-300 hover:border-hkust-gold rounded-lg p-5 text-center cursor-pointer transition bg-slate-50 hover:bg-slate-100">
                         <i data-lucide="file-input" class="w-9 h-9 mx-auto text-slate-400 mb-1.5"></i>
                         <p class="text-xs font-semibold text-slate-700">Click to browse or drop Candidate file(s) here</p>
-                        <p class="text-[11px] text-slate-400 mt-1">Supports XLSX, XLS, CSV, BibTeX, DOCX, TXT and PDF</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Supports XLSX, XLS, CSV, BibTeX (.bib / .bibtex), DOCX, PDF, and TXT</p>
                     </div>
-                    <input type="file" id="target-input" accept=".csv,.xlsx,.xls,.bib,.bibtex,.docx,.pdf,.txt" multiple class="hidden" onclick="event.stopPropagation()" onchange="handleFileUpload(event, 'target')">
+                    <input type="file" id="target-input" accept=".csv,.xlsx,.xls,.bib,.bibtex,.docx,.pdf,.txt,text/plain,application/x-bibtex,text/x-bibtex" multiple class="hidden" onclick="event.stopPropagation()" onchange="handleFileUpload(event, 'target')">
                     <div id="target-file-info" class="hidden space-y-2">
                         <div class="flex justify-between items-center text-xs font-semibold text-slate-700">
                             <span>Uploaded Candidate Files (<span id="target-file-count">0</span>):</span>
@@ -486,7 +486,7 @@
 
         async function processFile(file, type) {
             const fileName = file.name;
-            const ext = fileName.split('.').pop().toLowerCase();
+            const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
 
             try {
                 let mappedRecords = [];
@@ -499,28 +499,46 @@
                     const arrayBuffer = await file.arrayBuffer();
                     const text = await extractTextFromPDF(arrayBuffer);
                     mappedRecords = scanPublicationsFromText(text, fileName, type);
-                } else if (ext === 'txt') {
+                } else if (ext === 'bib' || ext === 'bibtex') {
                     const text = await file.text();
-                    if (text.trim().startsWith('@')) {
-                        mappedRecords = parseBibTeX(text).map((b, idx) => wrapStandardRecord(b.title, b.doi, b.authors, b.journal, b.year, b.raw, fileName, type, idx));
+                    const bibEntries = parseBibTeX(text);
+                    if (bibEntries.length > 0) {
+                        mappedRecords = bibEntries.map((b, idx) =>
+                            wrapStandardRecord(b.title, b.doi, b.authors, b.journal, b.year, b.raw, fileName, type, idx)
+                        );
                     } else {
                         mappedRecords = scanPublicationsFromText(text, fileName, type);
                     }
-                } else if (ext === 'bib' || ext === 'bibtex') {
-                    const text = await file.text();
-                    mappedRecords = parseBibTeX(text).map((b, idx) => wrapStandardRecord(b.title, b.doi, b.authors, b.journal, b.year, b.raw, fileName, type, idx));
-                } else if (ext === 'csv') {
-                    const text = await file.text();
-                    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-                    mappedRecords = scanStructuredRecords(parsed.data || [], fileName, type);
                 } else if (ext === 'xlsx' || ext === 'xls') {
                     const arrayBuffer = await file.arrayBuffer();
                     const data = new Uint8Array(arrayBuffer);
                     const workbook = XLSX.read(data, { type: 'array' });
                     mappedRecords = parseExcelWorkbook(workbook, fileName, type);
+                } else if (ext === 'csv') {
+                    const text = await file.text();
+                    if (/@\s*[a-zA-Z0-9_-]+\s*[{(]/.test(text)) {
+                        const bibEntries = parseBibTeX(text);
+                        mappedRecords = bibEntries.map((b, idx) =>
+                            wrapStandardRecord(b.title, b.doi, b.authors, b.journal, b.year, b.raw, fileName, type, idx)
+                        );
+                    } else {
+                        const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+                        mappedRecords = scanStructuredRecords(parsed.data || [], fileName, type);
+                    }
                 } else {
-                    showToast('Unsupported file format: .' + ext);
-                    return;
+                    const text = await file.text();
+                    if (/@\s*[a-zA-Z0-9_-]+\s*[{(]/.test(text)) {
+                        const bibEntries = parseBibTeX(text);
+                        if (bibEntries.length > 0) {
+                            mappedRecords = bibEntries.map((b, idx) =>
+                                wrapStandardRecord(b.title, b.doi, b.authors, b.journal, b.year, b.raw, fileName, type, idx)
+                            );
+                        } else {
+                            mappedRecords = scanPublicationsFromText(text, fileName, type);
+                        }
+                    } else {
+                        mappedRecords = scanPublicationsFromText(text, fileName, type);
+                    }
                 }
 
                 if (mappedRecords.length === 0) {
@@ -546,6 +564,177 @@
                 console.error('Error reading file:', err);
                 showToast('Failed to process file: ' + file.name);
             }
+        }
+
+        /*********************************************************************************
+         * FAULT-TOLERANT BIBTEX PARSER (.bib / .bibtex / Pure / Scopus / WoS / Scholar)
+         *********************************************************************************/
+        function parseBibTeX(rawText) {
+            const entries = [];
+            if (!rawText) return entries;
+
+            const text = String(rawText).replace(/^\uFEFF/, '');
+            const entryHeaderRegex = /@\s*([a-zA-Z0-9_-]+)\s*([({])/g;
+            let match;
+
+            while ((match = entryHeaderRegex.exec(text)) !== null) {
+                const entryType = match[1].toLowerCase();
+                const openChar = match[2];
+                const closeChar = openChar === '{' ? '}' : ')';
+                const entryStartIdx = match.index;
+                let i = entryHeaderRegex.lastIndex;
+                const len = text.length;
+
+                if (['comment', 'preamble', 'string'].includes(entryType)) {
+                    let skipDepth = 1;
+                    while (i < len && skipDepth > 0) {
+                        if (text[i] === '\\') { i += 2; continue; }
+                        if (text[i] === openChar) skipDepth++;
+                        else if (text[i] === closeChar) skipDepth--;
+                        i++;
+                    }
+                    entryHeaderRegex.lastIndex = i;
+                    continue;
+                }
+
+                // Find citation key or first field if key is omitted
+                let citeKey = '';
+                const firstComma = text.indexOf(',', i);
+                const firstEquals = text.indexOf('=', i);
+
+                if (firstComma !== -1 && (firstEquals === -1 || firstComma < firstEquals)) {
+                    citeKey = text.slice(i, firstComma).trim();
+                    i = firstComma + 1;
+                }
+
+                const fields = {};
+                let braceDepth = 1;
+
+                while (i < len && braceDepth > 0) {
+                    while (i < len && /[\s,]/.test(text[i])) i++;
+                    if (i >= len) break;
+
+                    if (text[i] === closeChar && braceDepth === 1) {
+                        braceDepth = 0;
+                        i++;
+                        break;
+                    }
+
+                    const keyMatch = text.slice(i).match(/^([a-zA-Z0-9_.:/-]+)\s*=\s*/);
+                    if (!keyMatch) {
+                        if (text[i] === openChar) braceDepth++;
+                        else if (text[i] === closeChar) braceDepth--;
+                        i++;
+                        continue;
+                    }
+
+                    const fieldKey = keyMatch[1].toLowerCase().trim();
+                    i += keyMatch[0].length;
+
+                    let parts = [];
+                    while (i < len) {
+                        while (i < len && /\s/.test(text[i])) i++;
+                        if (i >= len) break;
+
+                        if (text[i] === '{') {
+                            let fDepth = 1;
+                            i++;
+                            const valStart = i;
+                            while (i < len && fDepth > 0) {
+                                if (text[i] === '\\') { i += 2; continue; }
+                                if (text[i] === '{') fDepth++;
+                                else if (text[i] === '}') fDepth--;
+                                if (fDepth === 0) break;
+                                i++;
+                            }
+                            parts.push(text.slice(valStart, i));
+                            if (i < len && text[i] === '}') i++;
+                        } else if (text[i] === '"') {
+                            i++;
+                            const valStart = i;
+                            while (i < len) {
+                                if (text[i] === '\\') { i += 2; continue; }
+                                if (text[i] === '"') break;
+                                i++;
+                            }
+                            parts.push(text.slice(valStart, i));
+                            if (i < len && text[i] === '"') i++;
+                        } else {
+                            const bareMatch = text.slice(i).match(/^([^\s,#})]+)/);
+                            if (bareMatch) {
+                                parts.push(bareMatch[1]);
+                                i += bareMatch[1].length;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        while (i < len && /\s/.test(text[i])) i++;
+                        if (i < len && text[i] === '#') {
+                            i++;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    fields[fieldKey] = cleanBibValue(parts.join(' '));
+                }
+
+                entryHeaderRegex.lastIndex = i;
+                const rawEntryText = text.slice(entryStartIdx, i).trim();
+
+                const title = fields.title || fields.booktitle || fields['article-title'] || '';
+                const doi = fields.doi || extractDOIFromText(fields.url || fields.note || fields.howpublished || '');
+                const rawAuthors = fields.author || fields.authors || fields.editor || '';
+                const authors = rawAuthors.replace(/\s+and\s+/gi, '; ');
+                const journal = fields.journal || fields.journaltitle || fields.booktitle || fields.series || fields.publisher || '';
+                const year = fields.year || extractYearFromText(fields.date || fields.pubdate || '');
+
+                if (title || doi) {
+                    entries.push({
+                        id: citeKey || `bib_${entries.length}`,
+                        title: title,
+                        doi: doi,
+                        authors: authors,
+                        journal: journal,
+                        year: year,
+                        raw: rawEntryText
+                    });
+                }
+            }
+
+            return entries;
+        }
+
+        function cleanBibValue(val) {
+            if (!val) return '';
+            let str = String(val).trim();
+
+            const latexAccents = [
+                [/\\`\{?a\}?/g, 'à'], [/\\'\{?a\}?/g, 'á'], [/\\\^\{?a\}?/g, 'â'], [/\\~\{?a\}?/g, 'ã'], [/\\"\{?a\}?/g, 'ä'],
+                [/\\`\{?e\}?/g, 'è'], [/\\'\{?e\}?/g, 'é'], [/\\\^\{?e\}?/g, 'ê'], [/\\"\{?e\}?/g, 'ë'],
+                [/\\`\{?i\}?/g, 'ì'], [/\\'\{?i\}?/g, 'í'], [/\\\^\{?i\}?/g, 'î'], [/\\"\{?i\}?/g, 'ï'],
+                [/\\`\{?o\}?/g, 'ò'], [/\\'\{?o\}?/g, 'ó'], [/\\\^\{?o\}?/g, 'ô'], [/\\~\{?o\}?/g, 'õ'], [/\\"\{?o\}?/g, 'ö'],
+                [/\\`\{?u\}?/g, 'ù'], [/\\'\{?u\}?/g, 'ú'], [/\\\^\{?u\}?/g, 'û'], [/\\"\{?u\}?/g, 'ü'],
+                [/\\~\{?n\}?/g, 'ñ'], [/\\c\{?c\}?/g, 'ç'], [/\\'\{?c\}?/g, 'ć'], [/\\v\{?s\}?/g, 'š'], [/\\v\{?c\}?/g, 'č'],
+                [/\\`\{?A\}?/g, 'À'], [/\\'\{?A\}?/g, 'Á'], [/\\"\{?A\}?/g, 'Ä'],
+                [/\\'\{?E\}?/g, 'É'], [/\\"\{?O\}?/g, 'Ö'], [/\\"\{?U\}?/g, 'Ü'], [/\\~\{?N\}?/g, 'Ñ']
+            ];
+            for (const [pattern, replacement] of latexAccents) {
+                str = str.replace(pattern, replacement);
+            }
+
+            str = str
+                .replace(/\\textsuperscript\{([^}]*)\}/g, '$1')
+                .replace(/\\textsubscript\{([^}]*)\}/g, '$1')
+                .replace(/\\(?:textit|textbf|emph|textrm|textsc)\{([^}]*)\}/g, '$1')
+                .replace(/\\([&_$%#])/g, '$1')
+                .replace(/---/g, '—')
+                .replace(/--/g, '–')
+                .replace(/~/g, ' ')
+                .replace(/[{}]/g, '');
+
+            return str.replace(/\s+/g, ' ').trim();
         }
 
         async function extractTextFromPDF(arrayBuffer) {
@@ -595,7 +784,7 @@
                     let matches = 0;
                     row.forEach(cell => {
                         const val = String(cell || '').trim().toLowerCase();
-                        for (const [key, aliases] of Object.entries(COLUMN_ALIASES)) {
+                        for (const [, aliases] of Object.entries(COLUMN_ALIASES)) {
                             if (aliases.includes(val)) matches++;
                         }
                     });
@@ -688,7 +877,7 @@
                 id: `${type}_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
                 title: title || rawCitation.slice(0, 160),
                 normTitle: normT,
-                normRawCitation: normalizeTitle(rawCitation || title),
+                normRawCitation: normalizeTitle(rawCitation || `${authors} ${title} ${journal} ${year}`),
                 titleTokens: getTokens(normT),
                 authors: authors,
                 authorSurnames: authorSurnames,
@@ -746,6 +935,15 @@
         }
 
         function scanPublicationsFromText(rawText, fileName, type) {
+            if (/@\s*(?:article|inproceedings|incollection|book|misc|phdthesis|mastersthesis|techreport|conference|unpublished)\s*[{(]/i.test(rawText)) {
+                const bibRecords = parseBibTeX(rawText);
+                if (bibRecords.length > 0) {
+                    return bibRecords.map((b, idx) =>
+                        wrapStandardRecord(b.title, b.doi, b.authors, b.journal, b.year, b.raw, fileName, type, idx)
+                    );
+                }
+            }
+
             const filterNonPubs = document.getElementById('chk-filter-nonpubs') ? document.getElementById('chk-filter-nonpubs').checked : true;
             const excludePatents = document.getElementById('chk-exclude-patents') ? document.getElementById('chk-exclude-patents').checked : true;
 
@@ -757,12 +955,11 @@
             }
 
             // Shield APA author list ellipses ("... Gaidano, G." or "… Gaidano, G.")
-            // so ellipsis dots are never mistaken for end-of-citation markers.
             text = text
                 .replace(/\.{3,}/g, ' ___APA_ELLIPSIS___ ')
                 .replace(/…/g, ' ___APA_ELLIPSIS___ ');
 
-            // Clean document headers and split glued entries
+            // Clean document headers and split glued entries (Fixed escaped parentheses)
             text = text
                 .replace(/^#\s*Research outputs\s*$/gim, '\n')
                 .replace(/\bListing of Research outputs\s*/gi, '\n')
@@ -773,13 +970,11 @@
                 .replace(/([a-z0-9.)\]])\s*(\d{1,3})\.\s*\t\s*(?=[A-Z])/gi, '$1\n$2. ')
                 .replace(/(?:^|\s)(\d{1,3})\.?\s*\t+\s*(?=[A-Z])/gm, '\n$1. ')
                 .replace(/(\(\d{4}\)\.?|\b(?:19|20)\d{2}\b\.?)\s+(\d{1,3})\.\s+(?=[A-Z][a-zA-Z-']+)/g, '$1\n$2. ')
-                // Only split merged APA citations after an authentic citation end (DOI, volume/page range, or article number)
                 .replace(/(https?:\/\/doi\.org\/\S+|(?:\d{1,6}[–-]\d{1,6}|\bArticle\s+[A-Za-z0-9]+\b)\.?)\s+(?=[A-Z][a-zA-Z-']+,?\s+[A-Z]\.(?:[^()\n]{0,350}?)\s*\(\s*(?:19|20)\d{2}[a-z]?\s*\)\.)/g, '$1\n');
 
-            // Restore the ellipsis in standard format
             text = text.replace(/___APA_ELLIPSIS___/g, '...');
 
-            // STITCH ORPHAN FRAGMENTS: If a line lacks a year/DOI and ends with author initials or ellipsis, merge it with next line
+            // Stitch orphan author fragments
             const rawLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
             const consolidatedLines = [];
 
@@ -827,7 +1022,7 @@
             const year = extractYearFromText(line);
 
             let s = line
-                .replace(/^\s*(\(\d+\)|\d+\.|\d{1,4}[.)]?|\*|-|•)\s*/, '')
+                .replace(/^\s*(\[\d+\]|\d+\.|\d{1,4}[.)]?|\*|-|•)\s*/, '')
                 .replace(/https?:\/\/\S+/gi, '')
                 .replace(/\bDOI:\s*(?:doi:)?\s*10\.\d{4,9}\/\S+/gi, '')
                 .trim();
@@ -852,7 +1047,6 @@
                 authors = apaMatch[1].trim();
                 const afterYear = apaMatch[2].trim();
 
-                // Look for journal / proceedings anchor at tail
                 const venueAnchor = afterYear.match(/\.\s+([A-Z][a-zA-Z\s,–-]+?,\s*\d+.*)$/);
                 if (venueAnchor) {
                     const dotPos = afterYear.lastIndexOf(venueAnchor[0]);
@@ -861,7 +1055,6 @@
                     return { title, doi, authors, journal, year };
                 }
 
-                // Or split at last period before volume/pages
                 const lastDot = afterYear.lastIndexOf('. ');
                 if (lastDot > 15) {
                     title = afterYear.slice(0, lastDot).trim();
@@ -939,7 +1132,7 @@
             t = t.replace(/[₀0]/g, '0').replace(/[₁1]/g, '1').replace(/[₂2]/g, '2').replace(/[₃3]/g, '3').replace(/[₄4]/g, '4')
                  .replace(/[₅5]/g, '5').replace(/[₆6]/g, '6').replace(/[₇7]/g, '7').replace(/[₈8]/g, '8').replace(/[₉9]/g, '9');
             t = t.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
-            t = t.replace(/^\(+|\)+$/g, '');
+            t = t.replace(/^\[+|\]+$/g, '');
             t = t.replace(/[^\p{L}\p{N}\s]/gu, ' ');
             return t.replace(/\s+/g, ' ').trim();
         }
@@ -1056,7 +1249,6 @@
             fastIndex.titleMap.clear();
             fastIndex.tokenIndex.clear();
 
-            // Index Reference Dataset
             refList.forEach(item => {
                 if (item.doi) fastIndex.doiMap.set(item.doi, item);
                 if (item.normTitle) {
@@ -1081,19 +1273,16 @@
                     let matchScore = 0;
                     let matchReason = '';
 
-                    // 1. EXACT DOI MATCH
                     if (cand.doi && fastIndex.doiMap.has(cand.doi)) {
                         bestMatch = fastIndex.doiMap.get(cand.doi);
                         matchScore = 100;
                         matchReason = 'Exact DOI Identifier Match';
                     }
-                    // 2. EXACT TITLE MATCH
                     else if (cand.normTitle && fastIndex.titleMap.has(cand.normTitle)) {
                         bestMatch = fastIndex.titleMap.get(cand.normTitle);
                         matchScore = 100;
                         matchReason = 'Exact Title String Match';
                     }
-                    // 3. MULTI-FIELD FUZZY & BIDIRECTIONAL CONTAINMENT MATCH
                     else if (cand.normTitle || cand.titleTokens.length > 0) {
                         const candidateSet = new Set();
                         cand.titleTokens.forEach(tok => {
@@ -1112,7 +1301,6 @@
                             let titleScore = 0;
                             let isContained = false;
 
-                            // Bidirectional Substring Containment:
                             if (refItem.normTitle && refItem.normTitle.length >= 22 && cand.normRawCitation.includes(refItem.normTitle)) {
                                 titleScore = 1.0;
                                 isContained = true;
@@ -1120,7 +1308,6 @@
                                 titleScore = 1.0;
                                 isContained = true;
                             } else {
-                                // Token Subset Containment: If >= 80% of reference title tokens exist in candidate text
                                 const candRawText = cand.normRawCitation;
                                 let refTokensInCand = 0;
                                 for (const rt of rTokens) {
@@ -1141,7 +1328,6 @@
                                 }
                             }
 
-                            // Author Surnames Overlap
                             let authorScore = 0.5;
                             if (cSurnames.size > 0 && refItem.authorSurnames && refItem.authorSurnames.length > 0) {
                                 let sharedAuthors = 0;
@@ -1149,13 +1335,11 @@
                                 authorScore = sharedAuthors / Math.max(1, Math.min(cSurnames.size, refItem.authorSurnames.length));
                             }
 
-                            // Journal Similarity
                             let journalScore = 0.5;
                             if (cand.normJournal && refItem.normJournal) {
                                 journalScore = calculateSimilarity(cand.normJournal, refItem.normJournal);
                             }
 
-                            // Year Guard
                             let yearPenalty = 0;
                             if (!isContained && cand.year && refItem.year && cand.year.length === 4 && refItem.year.length === 4) {
                                 const diff = Math.abs(parseInt(cand.year, 10) - parseInt(refItem.year, 10));
@@ -1163,7 +1347,6 @@
                                 else if (diff === 0) titleScore = Math.min(1.0, titleScore + 0.05);
                             }
 
-                            // Composite Score Calculation
                             let finalPct = 0;
                             if (isContained) {
                                 finalPct = Math.round(titleScore * 100);
@@ -1485,7 +1668,7 @@
                 safeSetText('scopus-file-count', state.scopusFiles.length);
                 listEl.innerHTML = state.scopusFiles.map(f => `
                     <div class="flex items-center justify-between bg-slate-100 p-2 rounded text-xs border border-slate-200">
-                        <span class="truncate max-w-[180px] font-medium text-slate-700" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+                        <span class="truncate max-w-[200px] font-medium text-slate-700" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
                         <div class="flex items-center space-x-2">
                             <span class="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded text-[10px] font-bold">${f.count} items</span>
                             <button onclick="removeScopusFile('${f.id}')" class="text-slate-400 hover:text-red-600 transition">
@@ -1513,7 +1696,7 @@
             rebuildScopusData();
             checkRunButtonState();
             updateStats();
-            showToast('Cleared reference files.');
+            showToast('Cleared reference dataset queue.');
         }
 
         function rebuildTargetData() {
@@ -1528,7 +1711,7 @@
                 safeSetText('target-file-count', state.targetFiles.length);
                 listEl.innerHTML = state.targetFiles.map(f => `
                     <div class="flex items-center justify-between bg-slate-100 p-2 rounded text-xs border border-slate-200">
-                        <span class="truncate max-w-[180px] font-medium text-slate-700" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+                        <span class="truncate max-w-[200px] font-medium text-slate-700" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
                         <div class="flex items-center space-x-2">
                             <span class="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold">${f.count} items</span>
                             <button onclick="removeTargetFile('${f.id}')" class="text-slate-400 hover:text-red-600 transition">
@@ -1556,7 +1739,7 @@
             rebuildTargetData();
             checkRunButtonState();
             updateStats();
-            showToast('Cleared candidate files.');
+            showToast('Cleared candidate dataset queue.');
         }
 
         function checkRunButtonState() {
@@ -1566,40 +1749,9 @@
             }
         }
 
-        function toggleSelectAll(checked) {
-            if (checked) {
-                state.filteredQueue.forEach(item => state.selectedIds.add(item.target.id));
-            } else {
-                state.selectedIds.clear();
-            }
-            renderQueue();
-            updateSelectedCount();
-        }
-
-        function toggleSelectRecord(id, checked) {
-            if (checked) state.selectedIds.add(id);
-            else state.selectedIds.delete(id);
-            updateSelectedCount();
-        }
-
-        function updateSelectedCount() {
-            const count = state.selectedIds.size;
-            safeSetText('selected-count', count);
-            const delBtn = document.getElementById('btn-delete-selected');
-            if (delBtn) {
-                if (count > 0) delBtn.classList.remove('hidden');
-                else delBtn.classList.add('hidden');
-            }
-        }
-
-        function changePage(delta) {
-            state.currentPage += delta;
-            renderQueue();
-        }
-
-        function goToPage(page) {
-            state.currentPage = parseInt(page, 10);
-            renderQueue();
+        function safeSetText(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
         }
 
         function switchTab(tab) {
@@ -1621,24 +1773,6 @@
             }
         }
 
-        function updateStats() {
-            const total = state.reconciliationResults.length;
-            const unmatched = state.reconciliationResults.filter(r => r.status === 'UNMATCHED').length;
-            safeSetText('stat-total', total);
-            safeSetText('stat-unmatched', unmatched);
-
-            const pendingBadge = document.getElementById('pending-badge');
-            if (pendingBadge) pendingBadge.innerText = unmatched;
-
-            const dbStatus = document.getElementById('db-status');
-            if (dbStatus) {
-                dbStatus.innerHTML = `
-                    <span class="w-2 h-2 mr-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                    Reference (${state.scopusData.length}) | Candidate (${state.targetData.length})
-                `;
-            }
-        }
-
         function toggleExportMenu() {
             const menu = document.getElementById('export-menu');
             if (menu) menu.classList.toggle('hidden');
@@ -1650,7 +1784,7 @@
         }
 
         function exportMissingPublications(format) {
-            const missing = state.reconciliationResults.filter(r => r.status === 'UNMATCHED');
+            const missing = state.reconciliationResults.filter(r => r.status === 'UNMATCHED' || r.status === 'FLAGGED');
             if (missing.length === 0) {
                 showToast('No missing publications to export.');
                 return;
@@ -1658,56 +1792,80 @@
 
             const exportData = missing.map(m => ({
                 Title: m.target.title,
-                DOI: m.target.doi,
                 Authors: m.target.authors,
                 Journal: m.target.journal,
                 Year: m.target.year,
+                DOI: m.target.doi,
+                MatchScore: m.score + '%',
+                Status: m.status,
+                RawCitation: m.target.rawCitation,
                 SourceFile: m.target.source
             }));
 
             if (format === 'csv') {
                 const csv = Papa.unparse(exportData);
                 downloadBlob(csv, 'hkust_missing_publications.csv', 'text/csv;charset=utf-8;');
+                showToast(`Exported ${missing.length} missing records as .CSV`);
             } else if (format === 'xlsx') {
                 const ws = XLSX.utils.json_to_sheet(exportData);
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "Missing Publications");
                 const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                downloadBlob(wbout, 'hkust_missing_publications.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "hkust_missing_publications.xlsx";
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+                showToast(`Exported ${missing.length} missing records as .XLSX`);
             } else if (format === 'bib') {
-                const bib = missing.map(m => {
-                    const citeKey = 'item_' + m.target.id.replace(/[^a-zA-Z0-9]/g, '');
-                    return `@article{${citeKey},\n  title={${m.target.title}},\n  author={${m.target.authors}},\n  journal={${m.target.journal}},\n  year={${m.target.year}},\n  doi={${m.target.doi}}\n}`;
+                const bib = missing.map((m, idx) => {
+                    const year = m.target.year || '2026';
+                    const fields = [`  title={${m.target.title}}`];
+                    if (m.target.authors) fields.push(`  author={${m.target.authors}}`);
+                    if (m.target.journal) fields.push(`  journal={${m.target.journal}}`);
+                    if (m.target.year) fields.push(`  year={${m.target.year}}`);
+                    if (m.target.doi) fields.push(`  doi={${m.target.doi}}`);
+                    fields.push(`  note={${m.target.rawCitation.replace(/[{}]/g, '')}}`);
+                    return `@article{MissingPub_${year}_${idx + 1},\n${fields.join(',\n')}\n}`;
                 }).join('\n\n');
                 downloadBlob(bib, 'hkust_missing_publications.bib', 'text/plain;charset=utf-8;');
+                showToast(`Exported ${missing.length} missing records as .BIB`);
             }
-            showToast(`Exported ${missing.length} missing records as .${format.toUpperCase()}`);
         }
 
         function exportAuditReport() {
             if (state.reconciliationResults.length === 0) {
-                showToast('No reconciliation audit log available.');
+                showToast('No audit results available.');
                 return;
             }
-
             const auditData = state.reconciliationResults.map(r => ({
                 CandidateTitle: r.target.title,
                 CandidateAuthors: r.target.authors,
+                CandidateJournal: r.target.journal,
                 CandidateDOI: r.target.doi,
                 CandidateYear: r.target.year,
-                MatchStatus: r.status,
                 MatchScore: r.score + '%',
+                MatchStatus: r.status,
                 MatchReason: r.reason,
-                MatchedRefTitle: r.bestMatch ? r.bestMatch.title : 'N/A',
-                MatchedRefDOI: r.bestMatch ? r.bestMatch.doi : 'N/A'
+                MatchedReferenceTitle: r.bestMatch ? r.bestMatch.title : 'N/A',
+                MatchedReferenceDOI: r.bestMatch ? r.bestMatch.doi : 'N/A'
             }));
-
             const ws = XLSX.utils.json_to_sheet(auditData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Audit Log");
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            downloadBlob(wbout, 'hkust_listmatching_audit_report.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            showToast('Exported complete audit report.');
+            const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "hkust_listmatching_audit_report.xlsx";
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+            showToast('Exported full audit report (.xlsx).');
         }
 
         function downloadBlob(content, filename, contentType) {
@@ -1718,15 +1876,64 @@
             a.download = filename;
             document.body.appendChild(a);
             a.click();
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }, 100);
+            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
         }
 
-        function safeSetText(id, val) {
-            const el = document.getElementById(id);
-            if (el) el.textContent = val;
+        function toggleSelectAll(checked) {
+            if (checked) {
+                state.filteredQueue.forEach(item => state.selectedIds.add(item.target.id));
+            } else {
+                state.selectedIds.clear();
+            }
+            renderQueue();
+            updateSelectedCount();
+        }
+
+        function toggleSelectRecord(id, checked) {
+            if (checked) state.selectedIds.add(id);
+            else state.selectedIds.delete(id);
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            safeSetText('selected-count', state.selectedIds.size);
+            const delBtn = document.getElementById('btn-delete-selected');
+            if (delBtn) {
+                if (state.selectedIds.size > 0) delBtn.classList.remove('hidden');
+                else delBtn.classList.add('hidden');
+            }
+        }
+
+        function changePage(delta) {
+            state.currentPage += delta;
+            renderQueue();
+        }
+
+        function goToPage(page) {
+            state.currentPage = parseInt(page, 10);
+            renderQueue();
+        }
+
+        function updateStats() {
+            const total = state.reconciliationResults.length;
+            const unmatched = state.reconciliationResults.filter(r => r.status === 'UNMATCHED' || r.status === 'FLAGGED').length;
+            safeSetText('stat-total', total);
+            safeSetText('stat-unmatched', unmatched);
+
+            const pendingBadge = document.getElementById('pending-badge');
+            if (pendingBadge) pendingBadge.innerText = unmatched;
+
+            const dbStatus = document.getElementById('db-status');
+            if (dbStatus) {
+                if (state.scopusData.length === 0 && state.targetData.length === 0) {
+                    dbStatus.innerHTML = `<span class="w-2 h-2 mr-1.5 bg-slate-400 rounded-full"></span>No datasets loaded`;
+                } else {
+                    dbStatus.innerHTML = `
+                        <span class="w-2 h-2 mr-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                        Loaded: Reference (${state.scopusData.length}) | Candidate (${state.targetData.length})
+                    `;
+                }
+            }
         }
 
         function escapeHtml(str) {
@@ -1741,14 +1948,14 @@
 
         function showToast(msg) {
             const toast = document.createElement('div');
-            toast.className = 'fixed bottom-5 right-5 bg-hkust-navy text-white text-xs px-4 py-3 rounded-lg shadow-xl z-50 transition transform duration-300 translate-y-0 flex items-center space-x-2';
-            toast.innerHTML = `<i data-lucide="info" class="w-4 h-4 text-hkust-gold shrink-0"></i><span>${msg}</span>`;
+            toast.className = 'fixed bottom-5 right-5 bg-hkust-navy text-white text-xs px-4 py-3 rounded-lg shadow-xl z-50 transition transform duration-300 translate-y-0';
+            toast.innerHTML = `<div class="flex items-center space-x-2"><i data-lucide="info" class="w-4 h-4 text-hkust-gold"></i><span>${escapeHtml(msg)}</span></div>`;
             document.body.appendChild(toast);
             if (window.lucide) lucide.createIcons();
             setTimeout(() => {
                 toast.classList.add('opacity-0', 'translate-y-2');
                 setTimeout(() => toast.remove(), 300);
-            }, 3000);
+            }, 3200);
         }
 
         function setupDropzones() {
