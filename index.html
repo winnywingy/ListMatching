@@ -1,0 +1,1796 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HKUST ListMatching - Publication Reconciliation System</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS for XLSX & XLS parsing & export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <!-- Mammoth.js for DOCX parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- PDF.js for PDF parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        if (window['pdfjs-dist/build/pdf']) {
+            window['pdfjs-dist/build/pdf'].GlobalWorkerOptions.workerSrc =
+                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        hkust: {
+                            navy: '#003366',
+                            gold: '#C69214',
+                            blue: '#005596',
+                            light: '#F4F7FA',
+                            accent: '#E0A100'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-full flex flex-col text-slate-800">
+    <!-- Top Navigation Header -->
+    <header class="bg-hkust-navy text-white shadow-md sticky top-0 z-30">
+        <div class="w-full px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-hkust-gold text-hkust-navy p-2 rounded-lg font-bold text-xl flex items-center justify-center w-10 h-10 shadow">
+                    <i data-lucide="book-open-check" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight tracking-wide">HKUST ListMatching</h1>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <!-- Multi-Format Export Dropdown Menu -->
+                <div class="relative inline-block text-left" id="export-dropdown-wrapper">
+                    <button onclick="toggleExportMenu()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded-lg transition flex items-center space-x-1.5 border border-slate-600 shadow">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span>Export Missing List</span>
+                        <i data-lucide="chevron-down" class="w-3 h-3 ml-0.5"></i>
+                    </button>
+                    <div id="export-menu" class="hidden absolute right-0 mt-2 w-56 rounded-lg shadow-xl bg-white ring-1 ring-slate-900/10 z-50 text-slate-700 divide-y divide-slate-100 overflow-hidden">
+                        <div class="py-1.5">
+                            <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Export Missing Records</div>
+                            <button onclick="exportMissingPublications('xlsx'); closeExportMenu();" class="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-100 flex items-center space-x-2 transition">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-600"></i>
+                                <span class="font-medium text-slate-700">Excel Format (.xlsx)</span>
+                            </button>
+                            <button onclick="exportMissingPublications('csv'); closeExportMenu();" class="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-100 flex items-center space-x-2 transition">
+                                <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+                                <span class="font-medium text-slate-700">CSV Document (.csv)</span>
+                            </button>
+                            <button onclick="exportMissingPublications('bib'); closeExportMenu();" class="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-100 flex items-center space-x-2 transition">
+                                <i data-lucide="book-open" class="w-4 h-4 text-amber-600"></i>
+                                <span class="font-medium text-slate-700">BibTeX Bibliography (.bib)</span>
+                            </button>
+                        </div>
+                        <div class="py-1">
+                            <button onclick="exportAuditReport(); closeExportMenu();" class="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-100 flex items-center space-x-2 text-slate-600 transition">
+                                <i data-lucide="clipboard-check" class="w-4 h-4 text-slate-500"></i>
+                                <span>Full Audit Log (.xlsx)</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Async Reconciliation Progress Modal -->
+    <div id="modal-progress" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-center space-y-4 border border-slate-200">
+            <div class="w-12 h-12 bg-hkust-navy/10 text-hkust-navy rounded-full flex items-center justify-center mx-auto">
+                <i data-lucide="cpu" class="w-6 h-6 animate-pulse"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-800 text-base" id="progress-title">Matching Publications...</h3>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                <div id="progress-bar" class="bg-hkust-navy h-3 rounded-full transition-all duration-150 w-0"></div>
+            </div>
+            <div class="flex justify-between text-xs text-slate-500 font-mono">
+                <span id="progress-count">0 / 0</span>
+                <span id="progress-percent">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <main class="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-6">
+        <!-- Navigation Tabs -->
+        <div class="border-b border-slate-200 flex justify-between items-center">
+            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                <button id="tab-btn-upload" onclick="switchTab('upload')" class="border-hkust-gold text-hkust-navy whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                    <span>1. File Upload & Mapping</span>
+                </button>
+                <button id="tab-btn-reconcile" onclick="switchTab('reconcile')" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center space-x-2">
+                    <i data-lucide="git-compare" class="w-4 h-4"></i>
+                    <span>2. Review & Matching</span>
+                    <span id="pending-badge" class="ml-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full font-bold">0</span>
+                </button>
+            </nav>
+            <div class="text-xs text-slate-500 flex items-center space-x-2">
+                <span id="db-status" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+                    <span class="w-2 h-2 mr-1.5 bg-slate-400 rounded-full"></span>
+                    No datasets loaded
+                </span>
+            </div>
+        </div>
+
+        <!-- TAB 1: FILE UPLOAD & CONFIGURATION -->
+        <div id="tab-content-upload" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Baseline File Card (Pure / Scopus) -->
+                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-3 h-3 bg-blue-600 rounded-full"></span>
+                            <h2 class="font-bold text-slate-800 text-base">Primary Reference Dataset</h2>
+                        </div>
+                        <span class="text-xs bg-blue-100 text-blue-800 font-semibold px-2.5 py-1 rounded">Primary</span>
+                    </div>
+                    <p class="text-xs text-slate-500">Upload existing validated records</p>
+                    <div id="scopus-dropzone" onclick="document.getElementById('scopus-input').click()" class="border-2 border-dashed border-slate-300 hover:border-hkust-blue rounded-lg p-5 text-center cursor-pointer transition bg-slate-50 hover:bg-slate-100">
+                        <i data-lucide="file-spreadsheet" class="w-9 h-9 mx-auto text-slate-400 mb-1.5"></i>
+                        <p class="text-xs font-semibold text-slate-700">Click to browse or drop Reference file(s) here</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Supports XLSX, XLS, CSV, BibTeX, DOCX, TXT and PDF</p>
+                    </div>
+                    <input type="file" id="scopus-input" accept=".csv,.xlsx,.xls,.bib,.bibtex,.docx,.pdf,.txt" multiple class="hidden" onclick="event.stopPropagation()" onchange="handleFileUpload(event, 'scopus')">
+                    <div id="scopus-file-info" class="hidden space-y-2">
+                        <div class="flex justify-between items-center text-xs font-semibold text-slate-700">
+                            <span>Uploaded Reference Files (<span id="scopus-file-count">0</span>):</span>
+                            <button onclick="clearAllScopusFiles()" class="text-[10px] text-red-600 hover:underline">Clear Queue</button>
+                        </div>
+                        <div id="scopus-files-list" class="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar pr-1"></div>
+                    </div>
+                </div>
+
+                <!-- Comparison Target File Card (Faculty CV) -->
+                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-3 h-3 bg-amber-500 rounded-full"></span>
+                            <h2 class="font-bold text-slate-800 text-base">Comparison Target Dataset</h2>
+                        </div>
+                        <span class="text-xs bg-amber-100 text-amber-800 font-semibold px-2.5 py-1 rounded">Candidate</span>
+                    </div>
+                    <p class="text-xs text-slate-500">Upload candidate file(s)</p>
+                    <div id="target-dropzone" onclick="document.getElementById('target-input').click()" class="border-2 border-dashed border-slate-300 hover:border-hkust-gold rounded-lg p-5 text-center cursor-pointer transition bg-slate-50 hover:bg-slate-100">
+                        <i data-lucide="file-input" class="w-9 h-9 mx-auto text-slate-400 mb-1.5"></i>
+                        <p class="text-xs font-semibold text-slate-700">Click to browse or drop Candidate file(s) here</p>
+                        <p class="text-[11px] text-slate-400 mt-1">Supports XLSX, XLS, CSV, BibTeX, DOCX, TXT and PDF</p>
+                    </div>
+                    <input type="file" id="target-input" accept=".csv,.xlsx,.xls,.bib,.bibtex,.docx,.pdf,.txt" multiple class="hidden" onclick="event.stopPropagation()" onchange="handleFileUpload(event, 'target')">
+                    <div id="target-file-info" class="hidden space-y-2">
+                        <div class="flex justify-between items-center text-xs font-semibold text-slate-700">
+                            <span>Uploaded Candidate Files (<span id="target-file-count">0</span>):</span>
+                            <button onclick="clearAllTargetFiles()" class="text-[10px] text-red-600 hover:underline">Clear Queue</button>
+                        </div>
+                        <div id="target-files-list" class="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar pr-1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Execution Bar -->
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                    <label class="inline-flex items-center space-x-2 cursor-pointer select-none">
+                        <input type="checkbox" id="chk-filter-nonpubs" checked class="rounded text-hkust-navy focus:ring-hkust-navy">
+                        <span class="font-medium text-slate-700">Auto-Ignore Non-Publication Text & Dividers</span>
+                    </label>
+                    <span class="text-slate-300">|</span>
+                    <label class="inline-flex items-center space-x-2 cursor-pointer select-none">
+                        <input type="checkbox" id="chk-exclude-patents" checked class="rounded text-hkust-navy focus:ring-hkust-navy">
+                        <span class="font-medium text-slate-700">Exclude Patent Sections</span>
+                    </label>
+                </div>
+                <button onclick="executeReconciliation()" id="run-btn" disabled class="w-full sm:w-auto px-6 py-3 bg-hkust-navy hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 shadow-lg">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <span>Match Publications</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 2: RECONCILIATION REVIEW QUEUE -->
+        <div id="tab-content-reconcile" class="hidden space-y-6">
+            <!-- Stats -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Screened</p>
+                        <p id="stat-total" class="text-3xl font-extrabold text-slate-800 mt-1">0</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5">Records parsed from comparison dataset</p>
+                    </div>
+                    <div class="p-3.5 bg-slate-100 rounded-xl text-slate-600">
+                        <i data-lucide="layers" class="w-6 h-6"></i>
+                    </div>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex items-center justify-between border-l-4 border-l-blue-600">
+                    <div>
+                        <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider">Missing Publications</p>
+                        <p id="stat-unmatched" class="text-3xl font-extrabold text-blue-700 mt-1">0</p>
+                        <p class="text-[11px] text-blue-600/70 mt-0.5">Outputs not found in reference dataset</p>
+                    </div>
+                    <div class="p-3.5 bg-blue-50 rounded-xl text-blue-600">
+                        <i data-lucide="plus-circle" class="w-6 h-6"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls: Status -> Similarity -> Year -> Search -->
+            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+                <div class="flex flex-col xl:flex-row gap-3 items-center justify-between">
+                    <div class="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+                        <!-- 1. Filter Status Dropdown -->
+                        <div class="flex items-center space-x-2">
+                            <label for="filter-status" class="text-xs font-semibold text-slate-600 whitespace-nowrap">Filter Status:</label>
+                            <select id="filter-status" onchange="applyFilters()" class="text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-hkust-blue font-semibold shadow-sm min-w-[240px]">
+                                <option value="UNMATCHED" selected>Show missing publications only</option>
+                                <option value="MATCHED">Show matched publications only</option>
+                                <option value="ALL">Show all records</option>
+                            </select>
+                        </div>
+
+                        <!-- 2. Filter Title Similarity Dropdown -->
+                        <div class="flex items-center space-x-2">
+                            <label for="filter-similarity" class="text-xs font-semibold text-slate-600 whitespace-nowrap">Similarity:</label>
+                            <select id="filter-similarity" onchange="applyFilters()" class="text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-hkust-blue font-semibold shadow-sm min-w-[150px]">
+                                <option value="ALL" selected>All Scores</option>
+                                <option value="0">0% (Novel / Missing)</option>
+                                <option value="1-64">1% – 64%</option>
+                                <option value="65-84">65% – 84% (Review)</option>
+                                <option value="85-99">85% – 99%</option>
+                                <option value="100">100% (Exact Match)</option>
+                            </select>
+                        </div>
+
+                        <!-- 3. Filter Publication Year Dropdown -->
+                        <div class="flex items-center space-x-2">
+                            <label for="filter-year" class="text-xs font-semibold text-slate-600 whitespace-nowrap">Year:</label>
+                            <select id="filter-year" onchange="applyFilters()" class="text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-hkust-blue font-semibold shadow-sm min-w-[120px]">
+                                <option value="ALL" selected>All Years</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Search Input -->
+                    <div class="relative w-full xl:w-80">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                        <input type="text" id="queue-search" oninput="applyFilters()" placeholder="Search title, author, journal, DOI..." class="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-hkust-blue">
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs gap-2">
+                    <div class="flex items-center space-x-4 text-slate-600">
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this.checked)" class="rounded text-hkust-navy focus:ring-hkust-navy">
+                            <span class="font-medium"><span id="selected-count">0</span> items selected</span>
+                        </div>
+                        <button id="btn-delete-selected" onclick="deleteSelectedRecords()" class="hidden text-xs text-red-600 hover:text-red-700 font-semibold flex items-center space-x-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            <span>Delete Selected</span>
+                        </button>
+                        <button type="button" onclick="swapComparisonDirection()" class="text-[11px] text-hkust-blue hover:underline font-semibold flex items-center space-x-1" title="Swap Reference and Candidate datasets to audit in reverse">
+                            <i data-lucide="arrow-left-right" class="w-3.5 h-3.5"></i>
+                            <span id="direction-label">Direction: Candidate &rarr; Reference</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="inline-flex rounded-lg shadow-sm">
+                            <button onclick="exportMissingPublications('xlsx')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-l-lg font-medium transition flex items-center space-x-1">
+                                <i data-lucide="download" class="w-3.5 h-3.5 text-slate-600"></i>
+                                <span>Export Missing List:</span>
+                            </button>
+                            <button type="button" onclick="exportMissingPublications('xlsx')" class="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 border-t border-b border-slate-300 font-bold transition text-[11px]">.XLSX</button>
+                            <button type="button" onclick="exportMissingPublications('csv')" class="px-2.5 py-1.5 bg-white hover:bg-blue-50 text-blue-700 border-t border-b border-l border-slate-300 font-bold transition text-[11px]">.CSV</button>
+                            <button type="button" onclick="exportMissingPublications('bib')" class="px-2.5 py-1.5 bg-white hover:bg-amber-50 text-amber-700 border-t border-b border-l border-r border-slate-300 rounded-r-lg font-bold transition text-[11px]">.BIB</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Result Table: Multi-field Review -->
+            <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden w-full">
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[11px] tracking-wider">
+                                <th class="p-3.5 w-10 text-center"><input type="checkbox" id="header-select-all" onchange="toggleSelectAll(this.checked)"></th>
+                                <th class="p-3.5 min-w-[340px]">Publication Title & Authors</th>
+                                <th class="p-3.5 w-48 whitespace-nowrap">DOI Identifier</th>
+                                <th class="p-3.5 w-60">Journal / Conference / Book</th>
+                                <th class="p-3.5 w-44 text-center whitespace-nowrap">Match Result</th>
+                                <th class="p-3.5 w-16 text-center whitespace-nowrap">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="queue-tbody" class="divide-y divide-slate-200">
+                            <tr>
+                                <td colspan="6" class="p-8 text-center text-slate-400">
+                                    <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 text-slate-300"></i>
+                                    <p class="font-medium text-slate-600">No records found.</p>
+                                    <p class="text-slate-400 text-[11px] mt-1">Upload Reference and Candidate files to compare publication lists.</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination Bar -->
+                <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
+                    <div class="text-slate-500">
+                        Showing <span id="page-start-idx" class="font-semibold text-slate-700">0</span> to <span id="page-end-idx" class="font-semibold text-slate-700">0</span> of <span id="page-total-count" class="font-semibold text-slate-700">0</span> filtered items
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="changePage(-1)" id="btn-prev-page" disabled class="px-3 py-1 bg-white border border-slate-300 rounded font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed">Previous</button>
+                        <span id="pagination-controls" class="text-slate-600 font-medium">Page <span id="current-page-num">1</span> of <span id="total-pages-num">1</span></span>
+                        <button onclick="changePage(1)" id="btn-next-page" disabled class="px-3 py-1 bg-white border border-slate-300 rounded font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Side-by-Side Comparative Modal -->
+    <div id="modal-diff" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+            <div class="px-6 py-4 bg-hkust-navy text-white flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="git-compare" class="w-5 h-5 text-hkust-gold"></i>
+                    <h3 class="font-bold text-sm tracking-wide">Comparative Publication Match Inspection</h3>
+                </div>
+                <button onclick="closeDiffModal()" class="text-slate-300 hover:text-white transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-6 custom-scrollbar flex-1 text-xs">
+                <div id="modal-match-banner" class="p-3 rounded-lg flex items-center justify-between bg-amber-50 border border-amber-200 text-amber-900">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="alert-circle" class="w-5 h-5 text-amber-600"></i>
+                        <div>
+                            <p class="font-bold text-xs" id="modal-match-status">Potential Match</p>
+                            <p class="text-[11px]" id="modal-match-reason">Reason</p>
+                        </div>
+                    </div>
+                    <span id="modal-match-score" class="font-bold text-sm px-3 py-1 bg-amber-200 text-amber-900 rounded-full">Score</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="border border-slate-200 rounded-lg p-4 bg-amber-50/30 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                            <span class="font-bold text-amber-900 text-xs flex items-center space-x-1">
+                                <i data-lucide="file-input" class="w-3.5 h-3.5"></i>
+                                <span id="modal-cand-source">Candidate Record</span>
+                            </span>
+                            <span class="bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.5 rounded">Scanned Record</span>
+                        </div>
+                        <div class="space-y-2">
+                            <div><p class="text-[10px] font-semibold text-slate-400 uppercase">Title</p><p id="modal-cand-title" class="font-semibold text-slate-800 leading-snug"></p></div>
+                            <div><p class="text-[10px] font-semibold text-slate-400 uppercase">Authors</p><p id="modal-cand-authors" class="text-slate-700"></p></div>
+                            <div><p class="text-[10px] font-semibold text-slate-400 uppercase">Journal / Venue</p><p id="modal-cand-journal" class="text-slate-700"></p></div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><p class="text-[10px] font-semibold text-slate-400 uppercase">DOI Identifier</p><p id="modal-cand-doi" class="font-mono text-slate-700"></p></div>
+                                <div><p class="text-[10px] font-semibold text-slate-400 uppercase">Year</p><p id="modal-cand-year" class="text-slate-700 font-medium"></p></div>
+                            </div>
+                            <div class="pt-2 border-t border-slate-200">
+                                <p class="text-[10px] font-semibold text-slate-400 uppercase">Raw Source String</p>
+                                <p id="modal-cand-raw" class="text-[11px] font-mono text-slate-600 mt-0.5 break-words"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="border border-slate-200 rounded-lg p-4 bg-blue-50/30 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                            <span class="font-bold text-blue-900 text-xs flex items-center space-x-1">
+                                <i data-lucide="database" class="w-3.5 h-3.5"></i>
+                                <span>Matched Reference Record</span>
+                            </span>
+                            <span class="bg-blue-100 text-blue-800 text-[10px] font-semibold px-2 py-0.5 rounded">Master Dataset</span>
+                        </div>
+                        <div class="space-y-2">
+                            <div><p class="text-[10px] font-semibold text-slate-400 uppercase">Title</p><p id="modal-scopus-title" class="font-semibold text-slate-800 leading-snug"></p></div>
+                            <div><p class="text-[10px] font-semibold text-slate-400 uppercase">Authors</p><p id="modal-scopus-authors" class="text-slate-700"></p></div>
+                            <div><p class="text-[10px] font-semibold text-slate-400 uppercase">Journal / Venue</p><p id="modal-scopus-journal" class="text-slate-700"></p></div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><p class="text-[10px] font-semibold text-slate-400 uppercase">DOI Identifier</p><p id="modal-scopus-doi" class="font-mono text-slate-700"></p></div>
+                                <div><p class="text-[10px] font-semibold text-slate-400 uppercase">Year</p><p id="modal-scopus-year" class="text-slate-700 font-medium"></p></div>
+                            </div>
+                            <div class="pt-2 border-t border-slate-200">
+                                <p class="text-[10px] font-semibold text-slate-400 uppercase">Raw Master String</p>
+                                <p id="modal-scopus-raw" class="text-[11px] font-mono text-slate-600 mt-0.5 break-words"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+                <button onclick="closeDiffModal()" class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100 font-semibold text-xs transition">Close</button>
+                <div class="flex items-center space-x-2">
+                    <button onclick="overrideActiveRecordStatus('MATCHED')" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs transition">Mark as Matched</button>
+                    <button onclick="overrideActiveRecordStatus('UNMATCHED')" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-xs transition">Mark as Missing</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const STOP_WORDS = new Set([
+            'a', 'an', 'the', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from', 'as', 'vs', 'versus', 'based', 'via', 'using'
+        ]);
+
+        const COLUMN_ALIASES = {
+            title: [
+                'title', 'publication title', 'document title', 'article title', 'paper title', 'output title',
+                'work title', 'item title', 'research output', 'output', 'citation title', 'name', 'article name',
+                '篇名', '题目', 'ti'
+            ],
+            doi: [
+                'doi', 'document object identifier', 'di', 'doi number', 'doi_id', 'electronic identifier', 'digital object identifier'
+            ],
+            authors: [
+                'authors', 'author', 'author names', 'creator', 'creators', 'contributors', 'au', '作者'
+            ],
+            journal: [
+                'journal', 'source title', 'publication name', 'journal title', 'booktitle', 'publisher',
+                'book title', 'conference', 'conference name', 'proceedings', 'source', '刊名', '期刊', 'so', 'venue'
+            ],
+            year: [
+                'year', 'publication year', 'pub year', 'py', '出版年', 'date', 'publication date'
+            ]
+        };
+
+        const state = {
+            scopusFiles: [],
+            scopusData: [],
+            targetFiles: [],
+            targetData: [],
+            reconciliationResults: [],
+            filteredQueue: [],
+            selectedIds: new Set(),
+            currentPage: 1,
+            pageSize: 50,
+            activeDiffRecord: null,
+            swappedDirection: false
+        };
+
+        const fastIndex = {
+            doiMap: new Map(),
+            titleMap: new Map(),
+            tokenIndex: new Map()
+        };
+
+        function handleFileUpload(event, type) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+            Array.from(files).forEach(f => processFile(f, type));
+            event.target.value = '';
+        }
+
+        async function processFile(file, type) {
+            const fileName = file.name;
+            const ext = fileName.split('.').pop().toLowerCase();
+
+            try {
+                let mappedRecords = [];
+
+                if (ext === 'docx') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const result = await mammoth.extractRawText({ arrayBuffer });
+                    mappedRecords = scanPublicationsFromText(result.value, fileName, type);
+                } else if (ext === 'pdf') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const text = await extractTextFromPDF(arrayBuffer);
+                    mappedRecords = scanPublicationsFromText(text, fileName, type);
+                } else if (ext === 'txt') {
+                    const text = await file.text();
+                    if (text.trim().startsWith('@')) {
+                        mappedRecords = parseBibTeX(text).map((b, idx) => wrapStandardRecord(b.title, b.doi, b.authors, b.journal, b.year, b.raw, fileName, type, idx));
+                    } else {
+                        mappedRecords = scanPublicationsFromText(text, fileName, type);
+                    }
+                } else if (ext === 'bib' || ext === 'bibtex') {
+                    const text = await file.text();
+                    mappedRecords = parseBibTeX(text).map((b, idx) => wrapStandardRecord(b.title, b.doi, b.authors, b.journal, b.year, b.raw, fileName, type, idx));
+                } else if (ext === 'csv') {
+                    const text = await file.text();
+                    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+                    mappedRecords = scanStructuredRecords(parsed.data || [], fileName, type);
+                } else if (ext === 'xlsx' || ext === 'xls') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const data = new Uint8Array(arrayBuffer);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    mappedRecords = parseExcelWorkbook(workbook, fileName, type);
+                } else {
+                    showToast('Unsupported file format: .' + ext);
+                    return;
+                }
+
+                if (mappedRecords.length === 0) {
+                    showToast(`No valid publications found in ${fileName}`);
+                    return;
+                }
+
+                if (type === 'scopus') {
+                    const fileId = 'scopus_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+                    state.scopusFiles.push({ id: fileId, name: fileName, count: mappedRecords.length, records: mappedRecords });
+                    rebuildScopusData();
+                    showToast(`Loaded ${mappedRecords.length} reference records from ${fileName}`);
+                } else {
+                    const fileId = 'target_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+                    state.targetFiles.push({ id: fileId, name: fileName, count: mappedRecords.length, records: mappedRecords });
+                    rebuildTargetData();
+                    showToast(`Loaded ${mappedRecords.length} candidate records from ${fileName}`);
+                }
+
+                checkRunButtonState();
+                updateStats();
+            } catch (err) {
+                console.error('Error reading file:', err);
+                showToast('Failed to process file: ' + file.name);
+            }
+        }
+
+        async function extractTextFromPDF(arrayBuffer) {
+            const pdf = await window['pdfjs-dist/build/pdf'].getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const content = await page.getTextContent();
+                let lastY = null;
+                let pageLines = [];
+                let currentLine = '';
+                for (const item of content.items) {
+                    const y = Math.round(item.transform[5]);
+                    if (lastY !== null && Math.abs(y - lastY) > 4) {
+                        pageLines.push(currentLine.trim());
+                        currentLine = item.str;
+                    } else {
+                        currentLine += (currentLine.endsWith(' ') || item.str.startsWith(' ') ? '' : ' ') + item.str;
+                    }
+                    lastY = y;
+                }
+                if (currentLine.trim()) pageLines.push(currentLine.trim());
+                fullText += pageLines.join('\n') + '\n';
+            }
+            return fullText;
+        }
+
+        /*********************************************************************************
+         * ROBUST EXCEL WORKBOOK PARSER (Supports .XLSX and .XLS)
+         *********************************************************************************/
+        function parseExcelWorkbook(workbook, fileName, type) {
+            let records = [];
+
+            for (const sheetName of workbook.SheetNames) {
+                const sheet = workbook.Sheets[sheetName];
+                if (!sheet) continue;
+
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+                if (!rows || rows.length === 0) continue;
+
+                let headerRowIdx = -1;
+                let maxMatchedAliases = 0;
+
+                for (let r = 0; r < Math.min(rows.length, 15); r++) {
+                    const row = rows[r];
+                    if (!Array.isArray(row)) continue;
+                    let matches = 0;
+                    row.forEach(cell => {
+                        const val = String(cell || '').trim().toLowerCase();
+                        for (const [key, aliases] of Object.entries(COLUMN_ALIASES)) {
+                            if (aliases.includes(val)) matches++;
+                        }
+                    });
+                    if (matches > maxMatchedAliases) {
+                        maxMatchedAliases = matches;
+                        headerRowIdx = r;
+                    }
+                }
+
+                if (headerRowIdx !== -1 && maxMatchedAliases >= 1) {
+                    const rawJson = XLSX.utils.sheet_to_json(sheet, { range: headerRowIdx, defval: '' });
+                    const sheetRecords = scanStructuredRecords(rawJson, fileName, type);
+                    if (sheetRecords.length > 0) records.push(...sheetRecords);
+                } else {
+                    const plainJson = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                    let sheetRecords = scanStructuredRecords(plainJson, fileName, type);
+
+                    if (sheetRecords.length === 0) {
+                        const textLines = [];
+                        rows.forEach(row => {
+                            if (Array.isArray(row)) {
+                                const longCell = row.find(c => typeof c === 'string' && c.trim().length > 30);
+                                if (longCell) textLines.push(longCell.trim());
+                            }
+                        });
+                        if (textLines.length > 0) {
+                            sheetRecords = scanPublicationsFromText(textLines.join('\n'), fileName, type);
+                        }
+                    }
+
+                    if (sheetRecords.length > 0) records.push(...sheetRecords);
+                }
+
+                if (records.length > 0) break;
+            }
+
+            return records;
+        }
+
+        function scanStructuredRecords(rows, fileName, type) {
+            return rows.map((row, idx) => {
+                let foundTitle = '';
+                let foundDoi = '';
+                let foundAuthors = '';
+                let foundJournal = '';
+                let foundYear = '';
+
+                Object.keys(row).forEach(k => {
+                    const lk = k.trim().toLowerCase();
+                    if (!foundTitle && COLUMN_ALIASES.title.includes(lk)) foundTitle = row[k];
+                    if (!foundDoi && COLUMN_ALIASES.doi.includes(lk)) foundDoi = row[k];
+                    if (!foundAuthors && COLUMN_ALIASES.authors.includes(lk)) foundAuthors = row[k];
+                    if (!foundJournal && COLUMN_ALIASES.journal.includes(lk)) foundJournal = row[k];
+                    if (!foundYear && COLUMN_ALIASES.year.includes(lk)) foundYear = row[k];
+                });
+
+                if (!foundTitle) foundTitle = row['Title'] || row['title'] || row['Article Title'] || '';
+                if (!foundDoi) foundDoi = row['DOI'] || row['doi'] || '';
+                if (!foundAuthors) foundAuthors = row['Authors'] || row['Author'] || row['author'] || '';
+                if (!foundJournal) foundJournal = row['Journal'] || row['Source title'] || row['Source'] || '';
+                if (!foundYear) foundYear = row['Year'] || row['year'] || '';
+
+                if (!foundTitle && !foundDoi) {
+                    const longVal = Object.values(row).find(v => typeof v === 'string' && v.trim().length > 35);
+                    if (longVal) {
+                        const parsed = parseSingleCitationLine(longVal);
+                        if (parsed.title || parsed.doi) {
+                            return wrapStandardRecord(parsed.title, parsed.doi, parsed.authors, parsed.journal, parsed.year, longVal, fileName, type, idx);
+                        }
+                    }
+                    return null;
+                }
+
+                if (!foundTitle && !foundDoi) return null;
+                return wrapStandardRecord(foundTitle, foundDoi, foundAuthors, foundJournal, foundYear, '', fileName, type, idx);
+            }).filter(Boolean);
+        }
+
+        function wrapStandardRecord(rawTitle, rawDoi, rawAuthors, rawJournal, rawYear, rawCitation, fileName, type, idx) {
+            const cleanDoi = normalizeDOI(rawDoi);
+            const title = String(rawTitle || '').replace(/^["'“«\s]+|["'”»\s]+$/g, '').trim();
+            const normT = normalizeTitle(title);
+            const year = String(rawYear || extractYearFromText(rawCitation || title) || '').trim();
+            const authors = String(rawAuthors || '').trim();
+            const journal = String(rawJournal || '').trim();
+
+            const authorSurnames = getAuthorSurnames(authors || rawCitation);
+
+            return {
+                id: `${type}_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+                title: title || rawCitation.slice(0, 160),
+                normTitle: normT,
+                normRawCitation: normalizeTitle(rawCitation || title),
+                titleTokens: getTokens(normT),
+                authors: authors,
+                authorSurnames: authorSurnames,
+                journal: journal,
+                normJournal: normalizeTitle(journal),
+                year: year,
+                doi: cleanDoi,
+                rawCitation: rawCitation || `${authors} (${year}). ${title}. ${journal}`,
+                source: fileName
+            };
+        }
+
+        /*********************************************************************************
+         * PUBLICATION-ONLY TEXT SCANNER (Protects APA Ellipsis, Filters Headers)
+         *********************************************************************************/
+        function isIgnoredHeaderOrDivider(line) {
+            if (!line) return true;
+            const trimmed = line.trim();
+            if (trimmed.length < 12) return true;
+
+            if (/^[-=_*~]{3,}\s*(?:(?:19|20)\d{2})?\s*[-=_*~]{3,}$/i.test(trimmed)) return true;
+            if (/^[-=_*~]{5,}$/.test(trimmed)) return true;
+
+            const lower = trimmed.toLowerCase();
+
+            const ignoredPrefixes = [
+                'publications: contributions to books',
+                'publications: peer reviewed international scientific journal',
+                'publications: peer reviewed',
+                'publications: conference',
+                'publications:',
+                'contributions to books',
+                'peer reviewed international scientific journal',
+                'additional papers in',
+                'to be updated here',
+                'listing of research outputs',
+                'research outputs',
+                'ordered by: modified date',
+                'ordered by:',
+                'the above report is produced',
+                'curriculum vitae',
+                'resume',
+                'a. facchetti, resume',
+                'patents us and selected',
+                'selected formalized applications'
+            ];
+
+            for (const p of ignoredPrefixes) {
+                if (lower.startsWith(p) || lower === p) return true;
+            }
+
+            if (/^(?:[ivxlcdm]+\.?|\d+\s*\/\s*\d+|page\s+\d+.*)$/i.test(trimmed)) return true;
+
+            return false;
+        }
+
+        function scanPublicationsFromText(rawText, fileName, type) {
+            const filterNonPubs = document.getElementById('chk-filter-nonpubs') ? document.getElementById('chk-filter-nonpubs').checked : true;
+            const excludePatents = document.getElementById('chk-exclude-patents') ? document.getElementById('chk-exclude-patents').checked : true;
+
+            let text = String(rawText || '').replace(/\r\n/g, '\n');
+
+            if (excludePatents) {
+                const patIdx = text.search(/\n\s*(Patents\s+US\s+and\s+Selected|Selected\s+Formalized\s+Applications)\b/i);
+                if (patIdx > 200) text = text.slice(0, patIdx);
+            }
+
+            // Shield APA author list ellipses ("... Gaidano, G." or "… Gaidano, G.")
+            // so ellipsis dots are never mistaken for end-of-citation markers.
+            text = text
+                .replace(/\.{3,}/g, ' ___APA_ELLIPSIS___ ')
+                .replace(/…/g, ' ___APA_ELLIPSIS___ ');
+
+            // Clean document headers and split glued entries
+            text = text
+                .replace(/^#\s*Research outputs\s*$/gim, '\n')
+                .replace(/\bListing of Research outputs\s*/gi, '\n')
+                .replace(/Ordered by:\s*Modified date/gi, '\n')
+                .replace(/(https?:\/\/doi\.org\/10\.\d{4,9}\/[^\s]+?)([A-Z][a-zA-Z-']+,?\s*[A-Z]\.)/g, '$1\n$2')
+                .replace(/(https?:\/\/doi\.org\/10\.\d{4,9}\/[^\s]+)\s+(?=[A-Z][a-zA-Z\s,'-]+,\s*(?:&\s*)?[A-Z]\.)/g, '$1\n')
+                .replace(/(\d{1,5}[–-]\d{1,5})(\d{3})\.\s*\t/g, '$1\n$2. ')
+                .replace(/([a-z0-9.)\]])\s*(\d{1,3})\.\s*\t\s*(?=[A-Z])/gi, '$1\n$2. ')
+                .replace(/(?:^|\s)(\d{1,3})\.?\s*\t+\s*(?=[A-Z])/gm, '\n$1. ')
+                .replace(/(\(\d{4}\)\.?|\b(?:19|20)\d{2}\b\.?)\s+(\d{1,3})\.\s+(?=[A-Z][a-zA-Z-']+)/g, '$1\n$2. ')
+                // Only split merged APA citations after an authentic citation end (DOI, volume/page range, or article number)
+                .replace(/(https?:\/\/doi\.org\/\S+|(?:\d{1,6}[–-]\d{1,6}|\bArticle\s+[A-Za-z0-9]+\b)\.?)\s+(?=[A-Z][a-zA-Z-']+,?\s+[A-Z]\.(?:[^()\n]{0,350}?)\s*\(\s*(?:19|20)\d{2}[a-z]?\s*\)\.)/g, '$1\n');
+
+            // Restore the ellipsis in standard format
+            text = text.replace(/___APA_ELLIPSIS___/g, '...');
+
+            // STITCH ORPHAN FRAGMENTS: If a line lacks a year/DOI and ends with author initials or ellipsis, merge it with next line
+            const rawLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            const consolidatedLines = [];
+
+            for (let i = 0; i < rawLines.length; i++) {
+                let current = rawLines[i];
+                while (
+                    i + 1 < rawLines.length &&
+                    !extractYearFromText(current) &&
+                    !extractDOIFromText(current) &&
+                    (/(?:[A-Z]\.|\.\.\.|…|,\s*)$/.test(current) || current.length < 120)
+                ) {
+                    current = current + ' ' + rawLines[i + 1];
+                    i++;
+                }
+                if (current.length >= 25) {
+                    consolidatedLines.push(current);
+                }
+            }
+
+            const results = [];
+
+            for (let i = 0; i < consolidatedLines.length; i++) {
+                const line = consolidatedLines[i];
+
+                if (filterNonPubs && isIgnoredHeaderOrDivider(line)) continue;
+
+                if (excludePatents && /\b(US\d{7,}|EP\d{7,}|WO\d{7,}|JP\d{7,}|CN\d{7,}|US\s+Patent\s+App\.)\b/i.test(line) && line.length < 180) {
+                    continue;
+                }
+
+                const parsed = parseSingleCitationLine(line);
+                if (!parsed.doi && normalizeTitle(parsed.title).length < 10) continue;
+
+                results.push(wrapStandardRecord(parsed.title, parsed.doi, parsed.authors, parsed.journal, parsed.year, line, fileName, type, results.length));
+            }
+
+            return results;
+        }
+
+        /*********************************************************************************
+         * CITATION LINE PARSER (Handles APA, Quotations, and ACS styles)
+         *********************************************************************************/
+        function parseSingleCitationLine(line) {
+            const doi = extractDOIFromText(line);
+            const year = extractYearFromText(line);
+
+            let s = line
+                .replace(/^\s*(\(\d+\)|\d+\.|\d{1,4}[.)]?|\*|-|•)\s*/, '')
+                .replace(/https?:\/\/\S+/gi, '')
+                .replace(/\bDOI:\s*(?:doi:)?\s*10\.\d{4,9}\/\S+/gi, '')
+                .trim();
+
+            let authors = '';
+            let title = '';
+            let journal = '';
+
+            // 1. Quoted Titles: “...”, "...", «...»
+            const quoteMatch = s.match(/[“"«]([^”"»]{15,300})[”"»]/);
+            if (quoteMatch) {
+                title = quoteMatch[1].trim();
+                const quotePos = s.indexOf(quoteMatch[0]);
+                authors = s.slice(0, quotePos).replace(/[,;.\s]+$/, '').trim();
+                journal = s.slice(quotePos + quoteMatch[0].length).replace(/^[,;.\s]+/, '').trim();
+                return { title, doi, authors, journal, year };
+            }
+
+            // 2. APA Style (Pure export): Author, A. (Year). Title. Journal / Proceedings, Vol, Pages.
+            const apaMatch = s.match(/^(.+?)\s*\(\s*(?:19|20)\d{2}[a-z]?\s*\)\.\s+([\s\S]+)$/);
+            if (apaMatch) {
+                authors = apaMatch[1].trim();
+                const afterYear = apaMatch[2].trim();
+
+                // Look for journal / proceedings anchor at tail
+                const venueAnchor = afterYear.match(/\.\s+([A-Z][a-zA-Z\s,–-]+?,\s*\d+.*)$/);
+                if (venueAnchor) {
+                    const dotPos = afterYear.lastIndexOf(venueAnchor[0]);
+                    title = afterYear.slice(0, dotPos).trim();
+                    journal = venueAnchor[1].trim();
+                    return { title, doi, authors, journal, year };
+                }
+
+                // Or split at last period before volume/pages
+                const lastDot = afterYear.lastIndexOf('. ');
+                if (lastDot > 15) {
+                    title = afterYear.slice(0, lastDot).trim();
+                    journal = afterYear.slice(lastDot + 2).trim();
+                    return { title, doi, authors, journal, year };
+                }
+
+                title = afterYear;
+                return { title, doi, authors, journal, year };
+            }
+
+            // 3. Book Chapter: Author in Book Title Eds.; Publisher (Year)
+            const bookMatch = s.match(/^(.+?)\s+\bin\s+([^.;]+?)(?:Eds?\.|\;|\((?:19|20)\d{2}\)|$)(.*)$/i);
+            if (bookMatch && bookMatch[2].length >= 10) {
+                authors = bookMatch[1].trim();
+                title = bookMatch[2].trim();
+                journal = (bookMatch[3] || 'Book Chapter').trim();
+                return { title, doi, authors, journal, year };
+            }
+
+            // 4. ACS / Wiley Style: Authors... Title Journal Year, Vol, Pages
+            const yearMatch = s.match(/\b(19\d{2}|20\d{2})\b/g);
+            if (yearMatch && yearMatch.length > 0) {
+                const lastYear = yearMatch[yearMatch.length - 1];
+                const yearPos = s.lastIndexOf(lastYear);
+                if (yearPos > 30) {
+                    const beforeYear = s.slice(0, yearPos).trim();
+                    const afterYear = s.slice(yearPos).trim();
+
+                    if (beforeYear.includes(';')) {
+                        const parts = beforeYear.split(';');
+                        const lastAuthorSegment = parts[parts.length - 1].trim();
+                        const authorBoundary = lastAuthorSegment.search(/\s+[A-Z][a-z]{3,}/);
+                        if (authorBoundary > 0 && authorBoundary < 35) {
+                            authors = parts.slice(0, -1).join(';') + '; ' + lastAuthorSegment.slice(0, authorBoundary).trim();
+                            title = lastAuthorSegment.slice(authorBoundary).trim();
+                            journal = afterYear;
+                            return { title, doi, authors, journal, year };
+                        }
+                    }
+
+                    title = beforeYear;
+                    journal = afterYear;
+                    return { title, doi, authors, journal, year };
+                }
+            }
+
+            title = s.slice(0, 180).trim();
+            return { title, doi, authors, journal, year };
+        }
+
+        function extractDOIFromText(text) {
+            if (!text) return '';
+            const cleanedText = String(text).replace(/(10\.\d{4,9}\/[^\s]+?)([A-Z][a-z]+,\s*[A-Z]\.)/g, '$1 $2');
+            const match = cleanedText.match(/\b(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)/i);
+            return match ? normalizeDOI(match[1]) : '';
+        }
+
+        function normalizeDOI(doi) {
+            if (!doi) return '';
+            let d = String(doi).trim();
+            try { d = decodeURIComponent(d); } catch (e) {}
+            const match = d.match(/(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)/i);
+            if (!match) return '';
+            let clean = match[1].replace(/[.,;)\s`\]]+$/, '');
+            clean = clean.replace(/(\d)[A-Z][a-z]{1,15}$/, '$1');
+            return clean.toLowerCase();
+        }
+
+        function normalizeTitle(title) {
+            if (!title) return '';
+            let t = String(title).toLowerCase();
+            t = t.replace(/<[^>]*>/g, '');
+            t = t.replace(/π/g, ' pi ').replace(/α/g, ' alpha ').replace(/β/g, ' beta ').replace(/γ/g, ' gamma ');
+            t = t.replace(/[₀0]/g, '0').replace(/[₁1]/g, '1').replace(/[₂2]/g, '2').replace(/[₃3]/g, '3').replace(/[₄4]/g, '4')
+                 .replace(/[₅5]/g, '5').replace(/[₆6]/g, '6').replace(/[₇7]/g, '7').replace(/[₈8]/g, '8').replace(/[₉9]/g, '9');
+            t = t.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+            t = t.replace(/^\(+|\)+$/g, '');
+            t = t.replace(/[^\p{L}\p{N}\s]/gu, ' ');
+            return t.replace(/\s+/g, ' ').trim();
+        }
+
+        function getTokens(normStr) {
+            if (!normStr) return [];
+            return normStr.split(' ').filter(t => t.length > 2 && !STOP_WORDS.has(t));
+        }
+
+        function getAuthorSurnames(text) {
+            if (!text) return [];
+            const clean = String(text).replace(/[\d()[\]{}*•….]/g, ' ').replace(/\b___APA_ELLIPSIS___\b/g, ' ');
+            const words = clean.split(/[,;\s&/]+/).filter(w => w.length >= 3 && /^\p{L}+$/u.test(w) && w.toLowerCase() !== 'ellipsis');
+            return Array.from(new Set(words.map(w => w.toLowerCase())));
+        }
+
+        function extractYearFromText(text) {
+            if (!text) return '';
+            const parenMatch = String(text).match(/\(\s*(19\d{2}|20\d{2})[a-z]?\s*\)/);
+            if (parenMatch) return parenMatch[1];
+            const commaMatch = String(text).match(/\b(19\d{2}|20\d{2})\s*[,;]/);
+            if (commaMatch) return commaMatch[1];
+            const allYears = String(text).match(/\b(19\d{2}|20\d{2})\b/g);
+            return allYears ? allYears[allYears.length - 1] : '';
+        }
+
+        function calculateSimilarity(str1, str2) {
+            if (!str1 || !str2) return 0;
+            if (str1 === str2) return 1.0;
+            const maxLen = Math.max(str1.length, str2.length);
+            if (maxLen === 0) return 1.0;
+            const jwScore = jaroWinkler(str1, str2);
+            const levScore = 1 - (levenshteinDistance(str1, str2) / maxLen);
+            return (jwScore * 0.5) + (levScore * 0.5);
+        }
+
+        function levenshteinDistance(a, b) {
+            const al = a.length;
+            const bl = b.length;
+            if (al === 0) return bl;
+            if (bl === 0) return al;
+            let prev = new Int32Array(bl + 1);
+            let curr = new Int32Array(bl + 1);
+            for (let j = 0; j <= bl; j++) prev[j] = j;
+            for (let i = 1; i <= al; i++) {
+                curr[0] = i;
+                const ac = a.charCodeAt(i - 1);
+                for (let j = 1; j <= bl; j++) {
+                    const cost = ac === b.charCodeAt(j - 1) ? 0 : 1;
+                    curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+                }
+                const temp = prev;
+                prev = curr;
+                curr = temp;
+            }
+            return prev[bl];
+        }
+
+        function jaroWinkler(s1, s2) {
+            let m = 0;
+            const l1 = s1.length;
+            const l2 = s2.length;
+            if (l1 === 0 || l2 === 0) return 0;
+            if (s1 === s2) return 1;
+            const range = Math.max(0, Math.floor(Math.max(l1, l2) / 2) - 1);
+            const s1Matches = new Array(l1).fill(false);
+            const s2Matches = new Array(l2).fill(false);
+            for (let i = 0; i < l1; i++) {
+                const low = Math.max(0, i - range);
+                const high = Math.min(i + range + 1, l2);
+                for (let j = low; j < high; j++) {
+                    if (!s2Matches[j] && s1[i] === s2[j]) {
+                        s1Matches[i] = true;
+                        s2Matches[j] = true;
+                        m++;
+                        break;
+                    }
+                }
+            }
+            if (m === 0) return 0;
+            let k = 0, numTrans = 0;
+            for (let i = 0; i < l1; i++) {
+                if (s1Matches[i]) {
+                    while (k < l2 && !s2Matches[k]) k++;
+                    if (k < l2 && s1[i] !== s2[k]) numTrans++;
+                    k++;
+                }
+            }
+            const jaro = (m / l1 + m / l2 + (m - numTrans / 2) / m) / 3;
+            let l = 0;
+            const maxPrefix = Math.min(4, Math.min(l1, l2));
+            while (l < maxPrefix && s1[l] === s2[l]) l++;
+            return jaro + l * 0.1 * (1 - jaro);
+        }
+
+        /*********************************************************************************
+         * BIDIRECTIONAL MULTI-FIELD RECONCILIATION ENGINE
+         *********************************************************************************/
+        function executeReconciliation() {
+            if (state.scopusData.length === 0 || state.targetData.length === 0) {
+                showToast('Please upload both Reference and Candidate files.');
+                return;
+            }
+
+            const refList = state.swappedDirection ? state.targetData : state.scopusData;
+            const candList = state.swappedDirection ? state.scopusData : state.targetData;
+
+            const modal = document.getElementById('modal-progress');
+            const pBar = document.getElementById('progress-bar');
+            safeSetText('progress-title', 'Comparing Publications (Title, Authors, Journal, Year, DOI)...');
+            if (modal) modal.classList.remove('hidden');
+
+            fastIndex.doiMap.clear();
+            fastIndex.titleMap.clear();
+            fastIndex.tokenIndex.clear();
+
+            // Index Reference Dataset
+            refList.forEach(item => {
+                if (item.doi) fastIndex.doiMap.set(item.doi, item);
+                if (item.normTitle) {
+                    fastIndex.titleMap.set(item.normTitle, item);
+                    item.titleTokens.forEach(tok => {
+                        if (!fastIndex.tokenIndex.has(tok)) fastIndex.tokenIndex.set(tok, []);
+                        fastIndex.tokenIndex.get(tok).push(item);
+                    });
+                }
+            });
+
+            const total = candList.length;
+            const results = [];
+            let processed = 0;
+            const batchSize = 60;
+
+            function processBatch(startIndex) {
+                const endIndex = Math.min(startIndex + batchSize, total);
+                for (let i = startIndex; i < endIndex; i++) {
+                    const cand = candList[i];
+                    let bestMatch = null;
+                    let matchScore = 0;
+                    let matchReason = '';
+
+                    // 1. EXACT DOI MATCH
+                    if (cand.doi && fastIndex.doiMap.has(cand.doi)) {
+                        bestMatch = fastIndex.doiMap.get(cand.doi);
+                        matchScore = 100;
+                        matchReason = 'Exact DOI Identifier Match';
+                    }
+                    // 2. EXACT TITLE MATCH
+                    else if (cand.normTitle && fastIndex.titleMap.has(cand.normTitle)) {
+                        bestMatch = fastIndex.titleMap.get(cand.normTitle);
+                        matchScore = 100;
+                        matchReason = 'Exact Title String Match';
+                    }
+                    // 3. MULTI-FIELD FUZZY & BIDIRECTIONAL CONTAINMENT MATCH
+                    else if (cand.normTitle || cand.titleTokens.length > 0) {
+                        const candidateSet = new Set();
+                        cand.titleTokens.forEach(tok => {
+                            const hits = fastIndex.tokenIndex.get(tok);
+                            if (hits) hits.forEach(h => candidateSet.add(h));
+                        });
+
+                        const pool = candidateSet.size > 0 ? Array.from(candidateSet) : refList;
+                        const cTokens = cand.titleTokens;
+                        const cSurnames = new Set(cand.authorSurnames);
+
+                        for (const refItem of pool) {
+                            const rTokens = refItem.titleTokens;
+                            if (!rTokens || rTokens.length === 0) continue;
+
+                            let titleScore = 0;
+                            let isContained = false;
+
+                            // Bidirectional Substring Containment:
+                            if (refItem.normTitle && refItem.normTitle.length >= 22 && cand.normRawCitation.includes(refItem.normTitle)) {
+                                titleScore = 1.0;
+                                isContained = true;
+                            } else if (cand.normTitle && cand.normTitle.length >= 22 && refItem.normRawCitation.includes(cand.normTitle)) {
+                                titleScore = 1.0;
+                                isContained = true;
+                            } else {
+                                // Token Subset Containment: If >= 80% of reference title tokens exist in candidate text
+                                const candRawText = cand.normRawCitation;
+                                let refTokensInCand = 0;
+                                for (const rt of rTokens) {
+                                    if (candRawText.includes(rt)) refTokensInCand++;
+                                }
+                                const refContainmentRatio = refTokensInCand / rTokens.length;
+
+                                if (refContainmentRatio >= 0.82 && rTokens.length >= 4) {
+                                    titleScore = 0.95;
+                                    isContained = true;
+                                } else {
+                                    const strSim = calculateSimilarity(cand.normTitle, refItem.normTitle);
+                                    const setR = new Set(rTokens);
+                                    let shared = 0;
+                                    for (const t of cTokens) if (setR.has(t)) shared++;
+                                    const diceSim = (2 * shared) / (cTokens.length + rTokens.length);
+                                    titleScore = Math.max(strSim, diceSim);
+                                }
+                            }
+
+                            // Author Surnames Overlap
+                            let authorScore = 0.5;
+                            if (cSurnames.size > 0 && refItem.authorSurnames && refItem.authorSurnames.length > 0) {
+                                let sharedAuthors = 0;
+                                refItem.authorSurnames.forEach(a => { if (cSurnames.has(a)) sharedAuthors++; });
+                                authorScore = sharedAuthors / Math.max(1, Math.min(cSurnames.size, refItem.authorSurnames.length));
+                            }
+
+                            // Journal Similarity
+                            let journalScore = 0.5;
+                            if (cand.normJournal && refItem.normJournal) {
+                                journalScore = calculateSimilarity(cand.normJournal, refItem.normJournal);
+                            }
+
+                            // Year Guard
+                            let yearPenalty = 0;
+                            if (!isContained && cand.year && refItem.year && cand.year.length === 4 && refItem.year.length === 4) {
+                                const diff = Math.abs(parseInt(cand.year, 10) - parseInt(refItem.year, 10));
+                                if (diff > 1) yearPenalty = 0.35;
+                                else if (diff === 0) titleScore = Math.min(1.0, titleScore + 0.05);
+                            }
+
+                            // Composite Score Calculation
+                            let finalPct = 0;
+                            if (isContained) {
+                                finalPct = Math.round(titleScore * 100);
+                            } else {
+                                const composite = (titleScore * 0.60) + (authorScore * 0.25) + (journalScore * 0.15) - yearPenalty;
+                                finalPct = Math.round(Math.max(0, Math.min(1.0, composite)) * 100);
+                            }
+
+                            if (finalPct > matchScore) {
+                                matchScore = finalPct;
+                                bestMatch = refItem;
+                                if (isContained) {
+                                    matchReason = 'Title Match (Citation Containment)';
+                                } else if (authorScore > 0.6 && journalScore > 0.6) {
+                                    matchReason = `Title (${Math.round(titleScore * 100)}%), Author & Journal Match`;
+                                } else {
+                                    matchReason = `Fuzzy Title Similarity (${Math.round(titleScore * 100)}%)`;
+                                }
+                            }
+                        }
+                    }
+
+                    let status = 'UNMATCHED';
+                    if (matchScore >= 85) status = 'MATCHED';
+                    else if (matchScore >= 65) status = 'FLAGGED';
+
+                    results.push({
+                        target: cand,
+                        bestMatch: bestMatch,
+                        score: matchScore,
+                        reason: matchReason || 'No match found',
+                        status: status
+                    });
+                }
+
+                processed = endIndex;
+                const pct = Math.round((processed / total) * 100);
+                if (pBar) pBar.style.width = `${pct}%`;
+                safeSetText('progress-count', `${processed} / ${total}`);
+                safeSetText('progress-percent', `${pct}%`);
+
+                if (processed < total) {
+                    setTimeout(() => processBatch(processed), 10);
+                } else {
+                    setTimeout(() => {
+                        state.reconciliationResults = results;
+                        if (modal) modal.classList.add('hidden');
+                        populateDynamicFilterOptions();
+                        switchTab('reconcile');
+                        applyFilters();
+                        updateStats();
+                        showToast(`Matching complete: ${results.length} publications evaluated.`);
+                    }, 100);
+                }
+            }
+
+            processBatch(0);
+        }
+
+        function populateDynamicFilterOptions() {
+            const yearSelect = document.getElementById('filter-year');
+            if (yearSelect) {
+                const currentVal = yearSelect.value;
+                const yearsSet = new Set();
+                state.reconciliationResults.forEach(r => {
+                    const y = (r.target.year || '').trim();
+                    if (y && /^\d{4}$/.test(y)) yearsSet.add(y);
+                });
+                const sortedYears = Array.from(yearsSet).sort((a, b) => b.localeCompare(a));
+                let yearHtml = '<option value="ALL">All Years</option>';
+                sortedYears.forEach(y => {
+                    yearHtml += `<option value="${y}">${y}</option>`;
+                });
+                yearSelect.innerHTML = yearHtml;
+                yearSelect.value = yearsSet.has(currentVal) ? currentVal : 'ALL';
+            }
+        }
+
+        function applyFilters() {
+            const query = (document.getElementById('queue-search')?.value || '').toLowerCase();
+            const statusFilter = document.getElementById('filter-status')?.value || 'UNMATCHED';
+            const similarityFilter = document.getElementById('filter-similarity')?.value || 'ALL';
+            const yearFilter = document.getElementById('filter-year')?.value || 'ALL';
+
+            state.filteredQueue = state.reconciliationResults.filter(item => {
+                if (statusFilter === 'UNMATCHED' && item.status === 'MATCHED') return false;
+                if (statusFilter === 'MATCHED' && item.status !== 'MATCHED') return false;
+
+                if (similarityFilter !== 'ALL') {
+                    const s = item.score;
+                    if (similarityFilter === '0' && s !== 0) return false;
+                    if (similarityFilter === '1-64' && (s < 1 || s > 64)) return false;
+                    if (similarityFilter === '65-84' && (s < 65 || s > 84)) return false;
+                    if (similarityFilter === '85-99' && (s < 85 || s > 99)) return false;
+                    if (similarityFilter === '100' && s !== 100) return false;
+                }
+
+                if (yearFilter !== 'ALL') {
+                    const itemYear = (item.target.year || '').trim();
+                    if (itemYear !== yearFilter) return false;
+                }
+
+                if (query) {
+                    const haystack = `${item.target.title} ${item.target.doi} ${item.target.authors} ${item.target.journal} ${item.target.year} ${item.target.rawCitation}`.toLowerCase();
+                    if (!haystack.includes(query)) return false;
+                }
+
+                return true;
+            });
+
+            state.currentPage = 1;
+            renderQueue();
+        }
+
+        function renderQueue() {
+            const tbody = document.getElementById('queue-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const totalFiltered = state.filteredQueue.length;
+            const totalPages = Math.ceil(totalFiltered / state.pageSize) || 1;
+            state.currentPage = Math.min(state.currentPage, totalPages);
+            const startIdx = (state.currentPage - 1) * state.pageSize;
+            const endIdx = Math.min(startIdx + state.pageSize, totalFiltered);
+            const pageItems = state.filteredQueue.slice(startIdx, endIdx);
+
+            safeSetText('page-start-idx', totalFiltered > 0 ? startIdx + 1 : 0);
+            safeSetText('page-end-idx', endIdx);
+            safeSetText('page-total-count', totalFiltered);
+
+            const paginationControls = document.getElementById('pagination-controls');
+            if (paginationControls) {
+                if (totalPages > 1) {
+                    let options = '';
+                    for (let i = 1; i <= totalPages; i++) {
+                        options += `<option value="${i}" ${i === state.currentPage ? 'selected' : ''}>${i}</option>`;
+                    }
+                    paginationControls.innerHTML = `
+                        Page 
+                        <select id="page-select" onchange="goToPage(this.value)" class="mx-1 text-xs border border-slate-300 rounded px-2 py-0.5 bg-white text-slate-800 focus:ring-2 focus:ring-hkust-blue font-semibold shadow-sm">
+                            ${options}
+                        </select> 
+                        of ${totalPages}
+                    `;
+                } else {
+                    paginationControls.innerHTML = `Page 1 of 1`;
+                }
+            }
+
+            const prevBtn = document.getElementById('btn-prev-page');
+            const nextBtn = document.getElementById('btn-next-page');
+            if (prevBtn) prevBtn.disabled = state.currentPage <= 1;
+            if (nextBtn) nextBtn.disabled = state.currentPage >= totalPages;
+
+            if (pageItems.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="p-8 text-center text-slate-400">
+                            <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 text-slate-300"></i>
+                            <p class="font-medium text-slate-600">No records found.</p>
+                            <p class="text-slate-400 text-[11px] mt-1">Upload Reference and Candidate files or adjust active filter criteria.</p>
+                        </td>
+                    </tr>
+                `;
+                if (window.lucide) lucide.createIcons();
+                return;
+            }
+
+            pageItems.forEach((item) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50/80 transition border-b border-slate-100 group';
+                const isChecked = state.selectedIds.has(item.target.id);
+
+                let badge = '';
+                if (item.score === 100) {
+                    badge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">${item.reason.includes('DOI') ? 'Exact DOI' : '100% Match'}</span>`;
+                } else if (item.score >= 80) {
+                    badge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${item.score}% Match</span>`;
+                } else if (item.score >= 65) {
+                    badge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">${item.score}% (Review)</span>`;
+                } else {
+                    badge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">Missing</span>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="p-3.5 text-center">
+                        <input type="checkbox" onchange="toggleSelectRecord('${item.target.id}', this.checked)" ${isChecked ? 'checked' : ''} class="rounded text-hkust-navy focus:ring-hkust-navy">
+                    </td>
+                    <td class="p-3.5">
+                        <p class="font-bold text-slate-800 text-xs leading-snug hover:text-hkust-navy cursor-pointer" onclick="openDiffModal('${item.target.id}')">${escapeHtml(item.target.title)}</p>
+                        ${item.target.authors ? `<p class="text-[11px] text-slate-500 mt-1 flex items-center gap-1"><i data-lucide="users" class="w-3 h-3 text-slate-400 shrink-0"></i><span class="truncate max-w-lg">${escapeHtml(item.target.authors)}</span></p>` : ''}
+                    </td>
+                    <td class="p-3.5 font-mono text-xs whitespace-nowrap">
+                        ${item.target.doi ? `
+                            <a href="https://doi.org/${encodeURIComponent(item.target.doi)}" target="_blank" class="text-blue-600 hover:underline flex items-center space-x-1">
+                                <span class="truncate max-w-[170px]">${escapeHtml(item.target.doi)}</span>
+                                <i data-lucide="external-link" class="w-3 h-3 flex-shrink-0"></i>
+                            </a>
+                        ` : '<span class="text-slate-400 italic">No DOI</span>'}
+                    </td>
+                    <td class="p-3.5 text-xs text-slate-700">
+                        <p class="font-medium text-slate-800 truncate max-w-[220px]" title="${escapeHtml(item.target.journal)}">${escapeHtml(item.target.journal || 'Unspecified Venue')}</p>
+                        <p class="text-[10px] text-slate-400 mt-0.5">Year: ${escapeHtml(item.target.year || '—')} | File: ${escapeHtml(item.target.source || 'Dataset')}</p>
+                    </td>
+                    <td class="p-3.5 text-center whitespace-nowrap cursor-pointer" onclick="openDiffModal('${item.target.id}')">
+                        ${badge}
+                    </td>
+                    <td class="p-3.5 text-center whitespace-nowrap">
+                        <button onclick="deleteRecord('${item.target.id}', event)" title="Delete record" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function deleteRecord(targetId, event) {
+            if (event) event.stopPropagation();
+            state.reconciliationResults = state.reconciliationResults.filter(r => r.target.id !== targetId);
+            state.selectedIds.delete(targetId);
+            updateSelectedCount();
+            applyFilters();
+            updateStats();
+            showToast('Record removed.');
+        }
+
+        function deleteSelectedRecords() {
+            if (state.selectedIds.size === 0) return;
+            const count = state.selectedIds.size;
+            state.reconciliationResults = state.reconciliationResults.filter(r => !state.selectedIds.has(r.target.id));
+            state.selectedIds.clear();
+            const headerCb = document.getElementById('header-select-all');
+            if (headerCb) headerCb.checked = false;
+            const selectAllCb = document.getElementById('select-all-cb');
+            if (selectAllCb) selectAllCb.checked = false;
+            updateSelectedCount();
+            applyFilters();
+            updateStats();
+            showToast(`Deleted ${count} records.`);
+        }
+
+        function overrideActiveRecordStatus(newStatus) {
+            if (!state.activeDiffRecord) return;
+            state.activeDiffRecord.status = newStatus;
+            closeDiffModal();
+            applyFilters();
+            updateStats();
+            showToast(`Marked as ${newStatus === 'MATCHED' ? 'Matched' : 'Missing'}`);
+        }
+
+        function openDiffModal(targetId) {
+            const item = state.reconciliationResults.find(r => r.target.id === targetId);
+            if (!item) return;
+            state.activeDiffRecord = item;
+
+            const modal = document.getElementById('modal-diff');
+            if (!modal) return;
+
+            safeSetText('modal-cand-source', `Candidate (${item.target.source})`);
+            safeSetText('modal-cand-title', item.target.title);
+            safeSetText('modal-cand-authors', item.target.authors || 'N/A');
+            safeSetText('modal-cand-journal', item.target.journal || 'N/A');
+            safeSetText('modal-cand-doi', item.target.doi || 'No DOI');
+            safeSetText('modal-cand-year', item.target.year || 'N/A');
+            safeSetText('modal-cand-raw', item.target.rawCitation || item.target.title);
+
+            if (item.bestMatch) {
+                safeSetText('modal-scopus-title', item.bestMatch.title);
+                safeSetText('modal-scopus-authors', item.bestMatch.authors || 'N/A');
+                safeSetText('modal-scopus-journal', item.bestMatch.journal || 'N/A');
+                safeSetText('modal-scopus-doi', item.bestMatch.doi || 'No DOI');
+                safeSetText('modal-scopus-year', item.bestMatch.year || 'N/A');
+                safeSetText('modal-scopus-raw', item.bestMatch.rawCitation || item.bestMatch.title);
+            } else {
+                safeSetText('modal-scopus-title', 'No matching publication in reference dataset');
+                safeSetText('modal-scopus-authors', 'N/A');
+                safeSetText('modal-scopus-journal', 'N/A');
+                safeSetText('modal-scopus-doi', 'N/A');
+                safeSetText('modal-scopus-year', 'N/A');
+                safeSetText('modal-scopus-raw', 'N/A');
+            }
+
+            safeSetText('modal-match-status', item.status === 'MATCHED' ? 'Match Identified' : (item.status === 'FLAGGED' ? 'Review Recommended' : 'Novel / Missing Record'));
+            safeSetText('modal-match-reason', item.reason);
+            safeSetText('modal-match-score', `${item.score}% Similarity`);
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeDiffModal() {
+            const modal = document.getElementById('modal-diff');
+            if (modal) modal.classList.add('hidden');
+            state.activeDiffRecord = null;
+        }
+
+        function swapComparisonDirection() {
+            state.swappedDirection = !state.swappedDirection;
+            const label = document.getElementById('direction-label');
+            if (label) {
+                label.textContent = state.swappedDirection
+                    ? 'Direction: Reference → Candidate'
+                    : 'Direction: Candidate → Reference';
+            }
+            executeReconciliation();
+        }
+
+        function rebuildScopusData() {
+            state.scopusData = [];
+            state.scopusFiles.forEach(f => state.scopusData.push(...f.records));
+            const infoContainer = document.getElementById('scopus-file-info');
+            const listEl = document.getElementById('scopus-files-list');
+            if (!infoContainer || !listEl) return;
+
+            if (state.scopusFiles.length > 0) {
+                infoContainer.classList.remove('hidden');
+                safeSetText('scopus-file-count', state.scopusFiles.length);
+                listEl.innerHTML = state.scopusFiles.map(f => `
+                    <div class="flex items-center justify-between bg-slate-100 p-2 rounded text-xs border border-slate-200">
+                        <span class="truncate max-w-[180px] font-medium text-slate-700" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded text-[10px] font-bold">${f.count} items</span>
+                            <button onclick="removeScopusFile('${f.id}')" class="text-slate-400 hover:text-red-600 transition">
+                                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+                if (window.lucide) lucide.createIcons();
+            } else {
+                infoContainer.classList.add('hidden');
+                listEl.innerHTML = '';
+            }
+        }
+
+        function removeScopusFile(fileId) {
+            state.scopusFiles = state.scopusFiles.filter(f => f.id !== fileId);
+            rebuildScopusData();
+            checkRunButtonState();
+            updateStats();
+        }
+
+        function clearAllScopusFiles() {
+            state.scopusFiles = [];
+            rebuildScopusData();
+            checkRunButtonState();
+            updateStats();
+            showToast('Cleared reference files.');
+        }
+
+        function rebuildTargetData() {
+            state.targetData = [];
+            state.targetFiles.forEach(f => state.targetData.push(...f.records));
+            const infoContainer = document.getElementById('target-file-info');
+            const listEl = document.getElementById('target-files-list');
+            if (!infoContainer || !listEl) return;
+
+            if (state.targetFiles.length > 0) {
+                infoContainer.classList.remove('hidden');
+                safeSetText('target-file-count', state.targetFiles.length);
+                listEl.innerHTML = state.targetFiles.map(f => `
+                    <div class="flex items-center justify-between bg-slate-100 p-2 rounded text-xs border border-slate-200">
+                        <span class="truncate max-w-[180px] font-medium text-slate-700" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold">${f.count} items</span>
+                            <button onclick="removeTargetFile('${f.id}')" class="text-slate-400 hover:text-red-600 transition">
+                                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+                if (window.lucide) lucide.createIcons();
+            } else {
+                infoContainer.classList.add('hidden');
+                listEl.innerHTML = '';
+            }
+        }
+
+        function removeTargetFile(fileId) {
+            state.targetFiles = state.targetFiles.filter(f => f.id !== fileId);
+            rebuildTargetData();
+            checkRunButtonState();
+            updateStats();
+        }
+
+        function clearAllTargetFiles() {
+            state.targetFiles = [];
+            rebuildTargetData();
+            checkRunButtonState();
+            updateStats();
+            showToast('Cleared candidate files.');
+        }
+
+        function checkRunButtonState() {
+            const runBtn = document.getElementById('run-btn');
+            if (runBtn) {
+                runBtn.disabled = !(state.scopusData.length > 0 && state.targetData.length > 0);
+            }
+        }
+
+        function toggleSelectAll(checked) {
+            if (checked) {
+                state.filteredQueue.forEach(item => state.selectedIds.add(item.target.id));
+            } else {
+                state.selectedIds.clear();
+            }
+            renderQueue();
+            updateSelectedCount();
+        }
+
+        function toggleSelectRecord(id, checked) {
+            if (checked) state.selectedIds.add(id);
+            else state.selectedIds.delete(id);
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const count = state.selectedIds.size;
+            safeSetText('selected-count', count);
+            const delBtn = document.getElementById('btn-delete-selected');
+            if (delBtn) {
+                if (count > 0) delBtn.classList.remove('hidden');
+                else delBtn.classList.add('hidden');
+            }
+        }
+
+        function changePage(delta) {
+            state.currentPage += delta;
+            renderQueue();
+        }
+
+        function goToPage(page) {
+            state.currentPage = parseInt(page, 10);
+            renderQueue();
+        }
+
+        function switchTab(tab) {
+            const uploadTab = document.getElementById('tab-content-upload');
+            const reconcileTab = document.getElementById('tab-content-reconcile');
+            const btnUpload = document.getElementById('tab-btn-upload');
+            const btnReconcile = document.getElementById('tab-btn-reconcile');
+
+            if (tab === 'upload') {
+                uploadTab.classList.remove('hidden');
+                reconcileTab.classList.add('hidden');
+                btnUpload.className = "border-hkust-gold text-hkust-navy whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2";
+                btnReconcile.className = "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center space-x-2";
+            } else {
+                uploadTab.classList.add('hidden');
+                reconcileTab.classList.remove('hidden');
+                btnReconcile.className = "border-hkust-gold text-hkust-navy whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2";
+                btnUpload.className = "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center space-x-2";
+            }
+        }
+
+        function updateStats() {
+            const total = state.reconciliationResults.length;
+            const unmatched = state.reconciliationResults.filter(r => r.status === 'UNMATCHED').length;
+            safeSetText('stat-total', total);
+            safeSetText('stat-unmatched', unmatched);
+
+            const pendingBadge = document.getElementById('pending-badge');
+            if (pendingBadge) pendingBadge.innerText = unmatched;
+
+            const dbStatus = document.getElementById('db-status');
+            if (dbStatus) {
+                dbStatus.innerHTML = `
+                    <span class="w-2 h-2 mr-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                    Reference (${state.scopusData.length}) | Candidate (${state.targetData.length})
+                `;
+            }
+        }
+
+        function toggleExportMenu() {
+            const menu = document.getElementById('export-menu');
+            if (menu) menu.classList.toggle('hidden');
+        }
+
+        function closeExportMenu() {
+            const menu = document.getElementById('export-menu');
+            if (menu) menu.classList.add('hidden');
+        }
+
+        function exportMissingPublications(format) {
+            const missing = state.reconciliationResults.filter(r => r.status === 'UNMATCHED');
+            if (missing.length === 0) {
+                showToast('No missing publications to export.');
+                return;
+            }
+
+            const exportData = missing.map(m => ({
+                Title: m.target.title,
+                DOI: m.target.doi,
+                Authors: m.target.authors,
+                Journal: m.target.journal,
+                Year: m.target.year,
+                SourceFile: m.target.source
+            }));
+
+            if (format === 'csv') {
+                const csv = Papa.unparse(exportData);
+                downloadBlob(csv, 'hkust_missing_publications.csv', 'text/csv;charset=utf-8;');
+            } else if (format === 'xlsx') {
+                const ws = XLSX.utils.json_to_sheet(exportData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Missing Publications");
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                downloadBlob(wbout, 'hkust_missing_publications.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            } else if (format === 'bib') {
+                const bib = missing.map(m => {
+                    const citeKey = 'item_' + m.target.id.replace(/[^a-zA-Z0-9]/g, '');
+                    return `@article{${citeKey},\n  title={${m.target.title}},\n  author={${m.target.authors}},\n  journal={${m.target.journal}},\n  year={${m.target.year}},\n  doi={${m.target.doi}}\n}`;
+                }).join('\n\n');
+                downloadBlob(bib, 'hkust_missing_publications.bib', 'text/plain;charset=utf-8;');
+            }
+            showToast(`Exported ${missing.length} missing records as .${format.toUpperCase()}`);
+        }
+
+        function exportAuditReport() {
+            if (state.reconciliationResults.length === 0) {
+                showToast('No reconciliation audit log available.');
+                return;
+            }
+
+            const auditData = state.reconciliationResults.map(r => ({
+                CandidateTitle: r.target.title,
+                CandidateAuthors: r.target.authors,
+                CandidateDOI: r.target.doi,
+                CandidateYear: r.target.year,
+                MatchStatus: r.status,
+                MatchScore: r.score + '%',
+                MatchReason: r.reason,
+                MatchedRefTitle: r.bestMatch ? r.bestMatch.title : 'N/A',
+                MatchedRefDOI: r.bestMatch ? r.bestMatch.doi : 'N/A'
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(auditData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Audit Log");
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            downloadBlob(wbout, 'hkust_listmatching_audit_report.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            showToast('Exported complete audit report.');
+        }
+
+        function downloadBlob(content, filename, contentType) {
+            const blob = new Blob([content], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
+
+        function safeSetText(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function showToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-5 right-5 bg-hkust-navy text-white text-xs px-4 py-3 rounded-lg shadow-xl z-50 transition transform duration-300 translate-y-0 flex items-center space-x-2';
+            toast.innerHTML = `<i data-lucide="info" class="w-4 h-4 text-hkust-gold shrink-0"></i><span>${msg}</span>`;
+            document.body.appendChild(toast);
+            if (window.lucide) lucide.createIcons();
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function setupDropzones() {
+            window.addEventListener('dragover', (e) => e.preventDefault(), false);
+            window.addEventListener('drop', (e) => e.preventDefault(), false);
+
+            ['scopus', 'target'].forEach(type => {
+                const dropzone = document.getElementById(`${type}-dropzone`);
+                if (!dropzone) return;
+
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dropzone.classList.add('border-hkust-gold', 'bg-slate-100');
+                    }, false);
+                });
+
+                ['dragleave'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dropzone.classList.remove('border-hkust-gold', 'bg-slate-100');
+                    }, false);
+                });
+
+                dropzone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('border-hkust-gold', 'bg-slate-100');
+                    const dt = e.dataTransfer;
+                    if (dt && dt.files.length > 0) {
+                        Array.from(dt.files).forEach(f => processFile(f, type));
+                    }
+                }, false);
+            });
+        }
+
+        window.onload = function() {
+            if (window.lucide) lucide.createIcons();
+            setupDropzones();
+        };
+    </script>
+</body>
+</html>
